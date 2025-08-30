@@ -3889,3 +3889,7 @@ Future<void> testMLKitSetup() async {
 
 -------------------------------------------------------------------------------------------------------------------------------------------------------------
 AFTER ACCOMPLISHING THE FINAL FEATURE WITH EVERYTHING I WANT A COMPLETE GUIDE ON HOW TO IMPLEMENT LIVENESS CHECK IN FLUTTER USING ML KIT
+
+Make use of the deepseek and claude context chunks to create a simplified guide 
+https://claude.ai/public/artifacts/7b59bd3d-6419-4d18-9c91-c1556b7fcff2
+https://chat.deepseek.com/a/chat/s/6d505be3-02c4-460c-9a98-ee01d83881dd
