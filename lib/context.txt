@@ -3888,3 +3888,4 @@ Future<void> testMLKitSetup() async {
 
 
 -------------------------------------------------------------------------------------------------------------------------------------------------------------
+AFTER ACCOMPLISHING THE FINAL FEATURE WITH EVERYTHING I WANT A COMPLETE GUIDE ON HOW TO IMPLEMENT LIVENESS CHECK IN FLUTTER USING ML KIT
