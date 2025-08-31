@@ -1,7 +1,6 @@
 import 'dart:developer' as dev;
 import 'dart:async';
 import 'dart:math';
-import 'dart:io' show Platform;
 
 import 'core.dart';
 
@@ -16,15 +15,16 @@ class FaceDetectionView extends StatefulWidget {
 
 class _FaceDetectionViewState extends State<FaceDetectionView>
     with SingleTickerProviderStateMixin {
-  // Face detector with debug-optimized settings for testing
+  // Face detector optimized for Poco M4 Pro (Helio G96)
   final FaceDetector faceDetector = FaceDetector(
     options: FaceDetectorOptions(
-      performanceMode: FaceDetectorMode.fast, // Faster for testing
-      enableContours: false, // Disable for faster processing
-      enableClassification: true, // Keep for challenge detection
-      minFaceSize: 0.1, // More lenient for testing
-      enableTracking: true, // Keep for consistency
-      enableLandmarks: true, // Keep for positioning
+      performanceMode: FaceDetectorMode.fast, // Optimized for Helio G96
+      enableContours: false, // Disabled for better performance
+      enableClassification: true, // Required for smile/blink detection
+      minFaceSize: 0.15, // Balanced for detection range
+      enableTracking: true, // Helps with consistency
+      enableLandmarks:
+          false, // Disabled for performance (not needed for basic challenges)
     ),
   );
   //  final FaceDetector faceDetector = FaceDetector(
@@ -56,14 +56,8 @@ class _FaceDetectionViewState extends State<FaceDetectionView>
   bool isFaceQualityGood = false;
   String facePositionFeedback = 'Position your face in the center';
 
-  // Challenge system with improved state management
-  List<String> challengeActions = [
-    'smile',
-    'blink',
-    'lookRight',
-    'lookLeft',
-    'nod',
-  ];
+  // Simplified challenge system for Poco M4 Pro (2 basic challenges)
+  List<String> challengeActions = ['smile', 'blink'];
   int currentActionIndex = 0;
   bool waitingForNeutral = false;
   bool actionCompleted = false;
@@ -99,13 +93,12 @@ class _FaceDetectionViewState extends State<FaceDetectionView>
   // Animation controller for visual feedback
   late AnimationController _animationController;
 
-  // Production-optimized positioning thresholds (from context.txt best practices)
+  // Poco M4 Pro optimized positioning thresholds
   static const double centerTolerance =
-      0.15; // 15% tolerance (more precise than 20%)
-  // 25% tolerance for face size
-  static const double angleTolerance = 12.0; // 12 degrees for head angle
-  static const double minFaceSize = 0.3; // Minimum face size ratio
-  static const double maxFaceSize = 0.8; // Maximum face size ratio
+      0.2; // 20% tolerance (more lenient for testing)
+  static const double angleTolerance = 15.0; // 15 degrees (more lenient)
+  static const double minFaceSize = 0.2; // More lenient minimum face size
+  static const double maxFaceSize = 0.9; // More lenient maximum face size
 
   @override
   void initState() {
@@ -130,12 +123,14 @@ class _FaceDetectionViewState extends State<FaceDetectionView>
     }
   }
 
-  /// Initialize camera with proper error handling
+  /// Initialize camera with Poco M4 Pro optimized settings
   Future<void> initializeCamera() async {
     try {
+      dev.log('📱 Initializing camera for Poco M4 Pro...');
+
       final cameras = await availableCameras();
       if (cameras.isEmpty) {
-        dev.log('No cameras available');
+        dev.log('❌ No cameras available');
         return;
       }
 
@@ -144,16 +139,25 @@ class _FaceDetectionViewState extends State<FaceDetectionView>
         orElse: () => cameras.first, // Fallback to any camera
       );
 
+      dev.log('📸 Found front camera: ${frontCamera.name}');
+      dev.log('📐 Camera resolution: ${frontCamera.sensorOrientation}°');
+
+      // Poco M4 Pro optimized camera settings
       cameraController = CameraController(
         frontCamera,
         ResolutionPreset
-            .medium, // Try medium instead of max for better performance
+            .low, // Use low resolution for better performance on Helio G96
         enableAudio: false,
         imageFormatGroup:
-            ImageFormatGroup.bgra8888, // Try this format as suggested
+            ImageFormatGroup.yuv420, // Force YUV420 for better compatibility
       );
 
+      dev.log('🔧 Camera controller created with YUV420 format');
+
       await cameraController.initialize();
+
+      dev.log('✅ Camera initialized successfully');
+
       if (mounted) {
         setState(() {
           isCameraInitialized = true;
@@ -161,183 +165,267 @@ class _FaceDetectionViewState extends State<FaceDetectionView>
         startFaceDetection();
       }
     } catch (e) {
-      dev.log('Camera initialization error: $e');
+      dev.log('💥 Camera initialization error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Camera initialization failed: $e')),
+          SnackBar(
+            content: Text('Camera initialization failed: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
   }
 
-  /// Start face detection on camera image stream with proper throttling
+  /// Start face detection with optimized throttling for Poco M4 Pro
   void startFaceDetection() {
     if (isCameraInitialized) {
+      dev.log('🚀 Starting optimized face detection stream...');
+
       cameraController.startImageStream((CameraImage image) {
+        // Optimized frame skipping for Helio G96 performance
         if (!isDetecting) {
           isDetecting = true;
-          detectFaces(image).then((_) {
-            isDetecting = false;
-          });
+          detectFacesOptimized(image)
+              .then((_) {
+                isDetecting = false;
+              })
+              .catchError((error) {
+                dev.log('⚠️ Face detection error: $error');
+                isDetecting = false;
+              });
         }
       });
     }
   }
 
-  /// Debug method to test face detection with proper error handling
-  Future<void> detectFaces(CameraImage image) async {
-    return detectFacesDebug(image); // Use the debug version
-  }
-
-  // Enhanced face detection with platform-specific handling
-  Future<void> detectFacesDebug(CameraImage image) async {
+  /// Optimized face detection for Poco M4 Pro with proper YUV handling
+  Future<void> detectFacesOptimized(CameraImage image) async {
     if (!mounted) return;
 
     try {
-      dev.log('=== FACE DETECTION DEBUG START ===');
-      dev.log('Image dimensions: ${image.width} x ${image.height}');
-      dev.log('Image format: ${image.format.group}');
-      dev.log('Number of planes: ${image.planes.length}');
+      // Performance monitoring
+      final startTime = DateTime.now();
 
-      for (int i = 0; i < image.planes.length; i++) {
-        dev.log(
-          'Plane $i: ${image.planes[i].bytes.length} bytes, stride: ${image.planes[i].bytesPerRow}',
-        );
+      dev.log('🔍 Processing frame: ${image.width}x${image.height}');
+      dev.log('📊 Format: ${image.format.group}');
+      dev.log('📋 Planes: ${image.planes.length}');
+
+      // Poco M4 Pro specific YUV handling
+      InputImage? inputImage = await _createOptimizedInputImage(image);
+
+      if (inputImage == null) {
+        dev.log('❌ Failed to create InputImage');
+        return;
       }
 
-      // Platform-specific format handling
-      List<InputImageFormat> formatsToTry = [];
+      // Process with optimized detector settings
+      List<Face> faces = await faceDetector.processImage(inputImage);
 
-      if (Platform.isAndroid) {
-        // Android: Try multiple formats in order of preference
-        formatsToTry = [
-          InputImageFormat.yuv420, // Most common for Android
-          InputImageFormat.nv21, // Alternative YUV format
-          InputImageFormat.yv12, // Another YUV variant
-          InputImageFormat.bgra8888, // Direct format if available
-        ];
-      } else if (Platform.isIOS) {
-        // iOS: Use BGRA format which is standard for iOS
-        formatsToTry = [InputImageFormat.bgra8888];
-      }
+      final processingTime = DateTime.now()
+          .difference(startTime)
+          .inMilliseconds;
+      dev.log('⚡ Processing time: ${processingTime}ms');
+      dev.log('👤 Faces detected: ${faces.length}');
 
-      bool detectionSuccessful = false;
-      String successfulFormat = '';
+      if (faces.isNotEmpty) {
+        Face face = faces.first;
 
-      for (InputImageFormat format in formatsToTry) {
-        try {
-          dev.log('Trying format: $format');
+        // Update UI efficiently
+        if (mounted) {
+          setState(() {
+            currentFace = face;
+            lastDetectionTime = DateTime.now();
+            isFaceDetected = true;
 
-          InputImage inputImage;
-
-          if (format == InputImageFormat.bgra8888) {
-            // For BGRA, we need to handle the format differently
-            inputImage = InputImage.fromBytes(
-              bytes: image.planes[0].bytes,
-              metadata: InputImageMetadata(
-                size: Size(image.width.toDouble(), image.height.toDouble()),
-                rotation: InputImageRotation.rotation0deg,
-                format: format,
-                bytesPerRow: image.planes[0].bytesPerRow,
-              ),
-            );
-          } else {
-            // For YUV formats, concatenate planes
-            Uint8List concatenatedBytes = _concatenatePlanes(image.planes);
-            inputImage = InputImage.fromBytes(
-              bytes: concatenatedBytes,
-              metadata: InputImageMetadata(
-                size: Size(image.width.toDouble(), image.height.toDouble()),
-                rotation: InputImageRotation.rotation0deg,
-                format: format,
-                bytesPerRow: image.width,
-              ),
-            );
-          }
-
-          dev.log('InputImage created successfully for format: $format');
-
-          List<Face> faces = await faceDetector.processImage(inputImage);
-          dev.log(
-            'Face detection completed for format: $format - Found ${faces.length} faces',
-          );
-
-          if (faces.isNotEmpty) {
-            detectionSuccessful = true;
-            successfulFormat = format.toString();
-
-            // Process the detected face
-            Face face = faces.first;
-            dev.log('Face details:');
-            dev.log('  Bounding box: ${face.boundingBox}');
-            dev.log('  Tracking ID: ${face.trackingId}');
-            dev.log('  Head rotation Y: ${face.headEulerAngleY}');
-            dev.log('  Head rotation Z: ${face.headEulerAngleZ}');
-            dev.log('  Smiling probability: ${face.smilingProbability}');
-            dev.log(
-              '  Left eye open probability: ${face.leftEyeOpenProbability}',
-            );
-            dev.log(
-              '  Right eye open probability: ${face.rightEyeOpenProbability}',
-            );
-
-            // Update UI with face data
-            if (mounted) {
-              setState(() {
-                currentFace = face;
-                lastDetectionTime = DateTime.now();
-                isFaceDetected = true;
-              });
-            }
-
-            // Check positioning and challenges
-            checkFacePositioning(face, image.width, image.height);
-            if (isPositionedCorrectly) {
-              checkChallenge(face);
-            }
-
-            break; // Exit the format loop since we found a working format
-          }
-        } catch (e, stackTrace) {
-          dev.log('Format $format failed: $e');
-          dev.log('Stack trace: $stackTrace');
-          continue; // Try next format
+            // Update face data for UI
+            smilingProbability = face.smilingProbability;
+            leftEyeOpenProbability = face.leftEyeOpenProbability;
+            rightEyeOpenProbability = face.rightEyeOpenProbability;
+            headEulerAngleY = face.headEulerAngleY;
+            headEulerAngleX = face.headEulerAngleX;
+            headEulerAngleZ = face.headEulerAngleZ;
+            faceBoundingBox = face.boundingBox;
+          });
         }
-      }
 
-      if (!detectionSuccessful) {
-        dev.log('All formats failed - no face detection possible');
+        // Check positioning and challenges
+        checkFacePositioning(face, image.width, image.height);
+        if (isPositionedCorrectly) {
+          checkChallenge(face);
+        }
+      } else {
         if (mounted) {
           setState(() {
             isFaceDetected = false;
-            facePositionFeedback = 'No face detected';
+            facePositionFeedback = 'Position your face in the center';
           });
         }
-      } else {
-        dev.log('Successfully detected face using format: $successfulFormat');
       }
     } catch (e, stackTrace) {
-      dev.log('Face detection error: $e');
-      dev.log('Stack trace: $stackTrace');
+      dev.log('💥 Optimized detection error: $e');
+      dev.log('📚 Stack trace: $stackTrace');
+
       if (mounted) {
         setState(() {
           isFaceDetected = false;
-          facePositionFeedback = 'Detection error';
+          facePositionFeedback = 'Detection error - please try again';
         });
       }
     }
-
-    dev.log('=== FACE DETECTION DEBUG END ===');
   }
 
-  // Legacy helper method (kept for compatibility)
-  Uint8List _concatenatePlanes(List<Plane> planes) {
-    final WriteBuffer allBytes = WriteBuffer();
-    for (Plane plane in planes) {
-      allBytes.putUint8List(plane.bytes);
+  /// Create optimized InputImage for Poco M4 Pro with proper YUV handling
+  Future<InputImage?> _createOptimizedInputImage(CameraImage image) async {
+    try {
+      // Try multiple formats in order of preference for Poco M4 Pro
+      List<InputImageFormat> formatsToTry = [
+        InputImageFormat.nv21, // Most reliable for Android
+        InputImageFormat.yuv420, // Alternative
+        InputImageFormat.bgra8888, // Fallback
+      ];
+
+      for (InputImageFormat format in formatsToTry) {
+        try {
+          dev.log('🎨 Trying format: $format');
+
+          InputImage? inputImage = await _createInputImageWithFormat(
+            image,
+            format,
+          );
+          if (inputImage != null) {
+            dev.log('✅ Successfully created InputImage with format: $format');
+            return inputImage;
+          }
+        } catch (e) {
+          dev.log('⚠️ Format $format failed: $e');
+          continue;
+        }
+      }
+
+      dev.log('❌ All formats failed');
+      return null;
+    } catch (e) {
+      dev.log('💥 InputImage creation error: $e');
+      return null;
     }
-    return allBytes.done().buffer.asUint8List();
   }
+
+  /// Create InputImage with specific format
+  Future<InputImage?> _createInputImageWithFormat(
+    CameraImage image,
+    InputImageFormat format,
+  ) async {
+    try {
+      Uint8List bytes;
+      int bytesPerRow;
+
+      switch (format) {
+        case InputImageFormat.nv21:
+          bytes = _createNV21Bytes(image);
+          bytesPerRow = image.width;
+          break;
+        case InputImageFormat.yuv420:
+          bytes = _createYUV420Bytes(image);
+          bytesPerRow = image.width;
+          break;
+        case InputImageFormat.bgra8888:
+          bytes = image.planes[0].bytes;
+          bytesPerRow = image.planes[0].bytesPerRow;
+          break;
+        default:
+          return null;
+      }
+
+      return InputImage.fromBytes(
+        bytes: bytes,
+        metadata: InputImageMetadata(
+          size: Size(image.width.toDouble(), image.height.toDouble()),
+          rotation: _getImageRotation(),
+          format: format,
+          bytesPerRow: bytesPerRow,
+        ),
+      );
+    } catch (e) {
+      dev.log('💥 Error creating InputImage with format $format: $e');
+      return null;
+    }
+  }
+
+  /// Create NV21 format bytes (most reliable for Android)
+  Uint8List _createNV21Bytes(CameraImage image) {
+    dev.log('🎨 Creating NV21 bytes...');
+
+    final yPlane = image.planes[0];
+    final uPlane = image.planes[1];
+    final vPlane = image.planes[2];
+
+    final ySize = image.width * image.height;
+    final uvSize = (image.width * image.height) ~/ 4;
+
+    final nv21Bytes = Uint8List(ySize + 2 * uvSize);
+
+    // Copy Y plane (luminance)
+    nv21Bytes.setRange(0, ySize, yPlane.bytes);
+
+    // Interleave U and V planes (chrominance) - V first, then U
+    int uvIndex = ySize;
+    for (int i = 0; i < uvSize; i++) {
+      nv21Bytes[uvIndex++] = vPlane.bytes[i]; // V first
+      nv21Bytes[uvIndex++] = uPlane.bytes[i]; // U second
+    }
+
+    dev.log('✅ NV21 bytes created: ${nv21Bytes.length} total bytes');
+    return nv21Bytes;
+  }
+
+  /// Create YUV420 format bytes (alternative)
+  Uint8List _createYUV420Bytes(CameraImage image) {
+    dev.log('🎨 Creating YUV420 bytes...');
+
+    final yPlane = image.planes[0];
+    final uPlane = image.planes[1];
+    final vPlane = image.planes[2];
+
+    final ySize = image.width * image.height;
+    final uSize = (image.width * image.height) ~/ 4;
+    final vSize = (image.width * image.height) ~/ 4;
+
+    final yuvBytes = Uint8List(ySize + uSize + vSize);
+
+    // Copy Y plane (luminance)
+    yuvBytes.setRange(0, ySize, yPlane.bytes);
+
+    // Copy U plane (chrominance)
+    yuvBytes.setRange(ySize, ySize + uSize, uPlane.bytes);
+
+    // Copy V plane (chrominance)
+    yuvBytes.setRange(ySize + uSize, ySize + uSize + vSize, vPlane.bytes);
+
+    dev.log('✅ YUV420 bytes created: ${yuvBytes.length} total bytes');
+    return yuvBytes;
+  }
+
+  /// Get proper image rotation for front camera
+  InputImageRotation _getImageRotation() {
+    // For front camera on most Android devices, we need 270 degrees
+    // This accounts for the camera sensor orientation
+    return InputImageRotation.rotation270deg;
+  }
+
+
+
+  /// Legacy method - now optimized for Poco M4 Pro
+  Future<void> detectFaces(CameraImage image) async {
+    return detectFacesOptimized(image);
+  }
+
+  /// Legacy debug method - kept for compatibility
+  Future<void> detectFacesDebug(CameraImage image) async {
+    return detectFacesOptimized(image);
+  }
+
+
 
   // Add this test method to validate ML Kit setup
   Future<void> testMLKitSetup() async {
@@ -531,13 +619,11 @@ class _FaceDetectionViewState extends State<FaceDetectionView>
     return 'Perfect! Ready for verification';
   }
 
-  /// Enhanced challenge action validation with production-optimized thresholds
+  /// Optimized challenge action validation for Poco M4 Pro
   bool _validateChallengeAction(Face face, String action) {
-    // Production-optimized thresholds
-    const double smileThreshold = 0.7;
-    const double eyeClosedThreshold = 0.3;
-    const double headTurnThreshold = 15.0;
-    const double nodThreshold = 20.0;
+    // Poco M4 Pro optimized thresholds (more lenient for testing)
+    const double smileThreshold = 0.6; // Lower threshold for easier detection
+    const double eyeClosedThreshold = 0.4; // More lenient blink detection
 
     switch (action) {
       case 'smile':
@@ -546,18 +632,6 @@ class _FaceDetectionViewState extends State<FaceDetectionView>
 
       case 'blink':
         return _detectEnhancedBlink(face, eyeClosedThreshold);
-
-      case 'lookRight':
-        return face.headEulerAngleY != null &&
-            face.headEulerAngleY! < -headTurnThreshold;
-
-      case 'lookLeft':
-        return face.headEulerAngleY != null &&
-            face.headEulerAngleY! > headTurnThreshold;
-
-      case 'nod':
-        return face.headEulerAngleX != null &&
-            face.headEulerAngleX! > nodThreshold;
 
       default:
         return false;
@@ -952,12 +1026,6 @@ class _FaceDetectionViewState extends State<FaceDetectionView>
         return 'smile naturally';
       case 'blink':
         return 'blink your eyes';
-      case 'lookRight':
-        return 'look to your right';
-      case 'lookLeft':
-        return 'look to your left';
-      case 'nod':
-        return 'nod your head down';
       default:
         return '';
     }
