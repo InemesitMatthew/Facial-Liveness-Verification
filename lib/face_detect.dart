@@ -282,11 +282,13 @@ class _FaceDetectionViewState extends State<FaceDetectionView>
             );
 
             // Update UI with face data
-            setState(() {
-              currentFace = face;
-              lastDetectionTime = DateTime.now();
-              isFaceDetected = true;
-            });
+            if (mounted) {
+              setState(() {
+                currentFace = face;
+                lastDetectionTime = DateTime.now();
+                isFaceDetected = true;
+              });
+            }
 
             // Check positioning and challenges
             checkFacePositioning(face, image.width, image.height);
@@ -305,20 +307,24 @@ class _FaceDetectionViewState extends State<FaceDetectionView>
 
       if (!detectionSuccessful) {
         dev.log('All formats failed - no face detection possible');
-        setState(() {
-          isFaceDetected = false;
-          facePositionFeedback = 'No face detected';
-        });
+        if (mounted) {
+          setState(() {
+            isFaceDetected = false;
+            facePositionFeedback = 'No face detected';
+          });
+        }
       } else {
         dev.log('Successfully detected face using format: $successfulFormat');
       }
     } catch (e, stackTrace) {
       dev.log('Face detection error: $e');
       dev.log('Stack trace: $stackTrace');
-      setState(() {
-        isFaceDetected = false;
-        facePositionFeedback = 'Detection error';
-      });
+      if (mounted) {
+        setState(() {
+          isFaceDetected = false;
+          facePositionFeedback = 'Detection error';
+        });
+      }
     }
 
     dev.log('=== FACE DETECTION DEBUG END ===');
@@ -360,17 +366,19 @@ class _FaceDetectionViewState extends State<FaceDetectionView>
 
   /// Update face detection results with comprehensive data
   void updateFaceDetectionResults(Face face, int imageWidth, int imageHeight) {
-    setState(() {
-      smilingProbability = face.smilingProbability;
-      leftEyeOpenProbability = face.leftEyeOpenProbability;
-      rightEyeOpenProbability = face.rightEyeOpenProbability;
-      headEulerAngleY = face.headEulerAngleY; // Left/Right rotation
-      headEulerAngleX = face.headEulerAngleX; // Up/Down rotation
-      headEulerAngleZ = face.headEulerAngleZ; // Tilt
-      faceBoundingBox = face.boundingBox;
-      faceConfidence = face.trackingId
-          ?.toDouble(); // Use tracking ID as confidence
-    });
+    if (mounted) {
+      setState(() {
+        smilingProbability = face.smilingProbability;
+        leftEyeOpenProbability = face.leftEyeOpenProbability;
+        rightEyeOpenProbability = face.rightEyeOpenProbability;
+        headEulerAngleY = face.headEulerAngleY; // Left/Right rotation
+        headEulerAngleX = face.headEulerAngleX; // Up/Down rotation
+        headEulerAngleZ = face.headEulerAngleZ; // Tilt
+        faceBoundingBox = face.boundingBox;
+        faceConfidence = face.trackingId
+            ?.toDouble(); // Use tracking ID as confidence
+      });
+    }
   }
 
   /// Enhanced face positioning detection with production-optimized thresholds
@@ -419,28 +427,30 @@ class _FaceDetectionViewState extends State<FaceDetectionView>
       faceSizeRatio: faceSizeRatio,
     );
 
-    setState(() {
-      isFaceInFrame = inFrame;
-      isFaceCentered = centered;
-      isFaceLookingStraight = lookingStraight;
-      isFaceQualityGood = qualityScore >= 0.8; // 80% quality threshold
-      isPositionedCorrectly =
-          inFrame && centered && lookingStraight && goodSize;
+    if (mounted) {
+      setState(() {
+        isFaceInFrame = inFrame;
+        isFaceCentered = centered;
+        isFaceLookingStraight = lookingStraight;
+        isFaceQualityGood = qualityScore >= 0.8; // 80% quality threshold
+        isPositionedCorrectly =
+            inFrame && centered && lookingStraight && goodSize;
 
-      // Enhanced user feedback with specific guidance
-      facePositionFeedback = _getPositioningFeedback(
-        face: face,
-        inFrame: inFrame,
-        centered: centered,
-        lookingStraight: lookingStraight,
-        goodSize: goodSize,
-        faceSizeRatio: faceSizeRatio,
-        centerX: centerX,
-        screenCenterX: screenCenterX,
-        centerY: centerY,
-        screenCenterY: screenCenterY,
-      );
-    });
+        // Enhanced user feedback with specific guidance
+        facePositionFeedback = _getPositioningFeedback(
+          face: face,
+          inFrame: inFrame,
+          centered: centered,
+          lookingStraight: lookingStraight,
+          goodSize: goodSize,
+          faceSizeRatio: faceSizeRatio,
+          centerX: centerX,
+          screenCenterX: screenCenterX,
+          centerY: centerY,
+          screenCenterY: screenCenterY,
+        );
+      });
+    }
   }
 
   /// Calculate quality score based on positioning factors
@@ -581,9 +591,11 @@ class _FaceDetectionViewState extends State<FaceDetectionView>
     // Wait for neutral position if required
     if (waitingForNeutral) {
       if (isNeutralPosition(face)) {
-        setState(() {
-          waitingForNeutral = false;
-        });
+        if (mounted) {
+          setState(() {
+            waitingForNeutral = false;
+          });
+        }
       } else {
         return; // Still waiting for neutral
       }
@@ -604,9 +616,11 @@ class _FaceDetectionViewState extends State<FaceDetectionView>
     if (elapsedSeconds > 15) {
       // Reset action if timeout
       actionStartTimes.remove(currentAction);
-      setState(() {
-        facePositionFeedback = 'Action timeout - please try again';
-      });
+      if (mounted) {
+        setState(() {
+          facePositionFeedback = 'Action timeout - please try again';
+        });
+      }
       return;
     }
 
@@ -615,29 +629,33 @@ class _FaceDetectionViewState extends State<FaceDetectionView>
 
     // Handle action completion with enhanced feedback
     if (actionCompleted && !completedActions[currentAction]!) {
-      setState(() {
-        completedActions[currentAction] = true;
-        actionCompleted = true;
-        facePositionFeedback = 'Great! Action completed successfully';
-      });
+      if (mounted) {
+        setState(() {
+          completedActions[currentAction] = true;
+          actionCompleted = true;
+          facePositionFeedback = 'Great! Action completed successfully';
+        });
+      }
 
       // Enhanced transition with better UX
       await Future.delayed(const Duration(milliseconds: 800));
 
       if (currentActionIndex < challengeActions.length - 1) {
-        setState(() {
-          currentActionIndex++;
-          waitingForNeutral = true;
-          actionCompleted = false;
-        });
+        if (mounted) {
+          setState(() {
+            currentActionIndex++;
+            waitingForNeutral = true;
+            actionCompleted = false;
+          });
+        }
       } else {
         // All challenges completed
-        setState(() {
-          challengeCompleted = true;
-        });
-
-        // Return success
         if (mounted) {
+          setState(() {
+            challengeCompleted = true;
+          });
+
+          // Return success
           Navigator.pop(context, true);
         }
       }
