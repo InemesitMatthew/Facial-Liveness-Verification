@@ -413,8 +413,6 @@ class _FaceDetectionViewState extends State<FaceDetectionView>
     return InputImageRotation.rotation270deg;
   }
 
-
-
   /// Legacy method - now optimized for Poco M4 Pro
   Future<void> detectFaces(CameraImage image) async {
     return detectFacesOptimized(image);
@@ -424,8 +422,6 @@ class _FaceDetectionViewState extends State<FaceDetectionView>
   Future<void> detectFacesDebug(CameraImage image) async {
     return detectFacesOptimized(image);
   }
-
-
 
   // Add this test method to validate ML Kit setup
   Future<void> testMLKitSetup() async {
