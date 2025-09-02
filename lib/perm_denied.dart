@@ -7,15 +7,15 @@ class PermDenied extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       home: Scaffold(
-        appBar: AppBar(title: const Text('Permission denied')),
+        appBar: AppBar(title: const Text('Permission Denied')),
         body: Center(
           child: AlertDialog(
-            title: Text("Permission Denied"),
-            content: Text("Camera access is required for verification."),
+            title: const Text('Permission Denied'),
+            content: const Text('Camera access is required for verification.'),
             actions: [
               TextButton(
                 onPressed: () => SystemNavigator.pop(),
-                child: Text("OK"),
+                child: const Text('OK'),
               ),
             ],
           ),

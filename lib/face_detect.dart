@@ -1,11 +1,8 @@
 import 'dart:developer' as dev;
 import 'dart:async';
 import 'dart:math';
-
 import 'core.dart';
 
-/// Production-ready liveness detection view with comprehensive face tracking
-/// and challenge validation system
 class FaceDetectionView extends StatefulWidget {
   const FaceDetectionView({super.key});
 
@@ -15,148 +12,121 @@ class FaceDetectionView extends StatefulWidget {
 
 class _FaceDetectionViewState extends State<FaceDetectionView>
     with SingleTickerProviderStateMixin {
-  // Face detector optimized for Poco M4 Pro (Helio G96)
   final FaceDetector faceDetector = FaceDetector(
     options: FaceDetectorOptions(
-      performanceMode: FaceDetectorMode.fast, // Optimized for Helio G96
-      enableContours: false, // Disabled for better performance
-      enableClassification: true, // Required for smile/blink detection
-      minFaceSize: 0.15, // Balanced for detection range
-      enableTracking: true, // Helps with consistency
-      enableLandmarks:
-          false, // Disabled for performance (not needed for basic challenges)
+      performanceMode: FaceDetectorMode.accurate,
+      enableContours: true,
+      enableClassification: true,
+      minFaceSize: 0.15,
+      enableTracking: true,
+      enableLandmarks: true,
     ),
   );
-  //  final FaceDetector faceDetector = FaceDetector(
-  //   options: FaceDetectorOptions(
-  //     performanceMode:
-  //         FaceDetectorMode.accurate, // Better accuracy for production
-  //     enableContours: true,
-  //     enableClassification: true,
-  //     minFaceSize: 0.3, // Good balance for detection range
-  //     enableTracking: true, // Maintains face tracking between frames
-  //     enableLandmarks: true, // Provides precise facial feature data
-  //   ),
-  // );
 
-  // Camera controller instance
   late CameraController cameraController;
-
-  // Camera initialization state
   bool isCameraInitialized = false;
 
-  // Face detection state
   bool isDetecting = false;
-  bool isFrontCamera = true;
+  int frameSkipCounter = 0;
+  static const int frameSkipRate = 1;
 
-  // Face positioning and quality checks
   bool isFaceInFrame = false;
   bool isFaceCentered = false;
   bool isFaceLookingStraight = false;
   bool isFaceQualityGood = false;
-  String facePositionFeedback = 'Position your face in the center';
+  bool isPositionedCorrectly = false;
+  String facePositionFeedback =
+      'Position your face in the center - we\'ll guide you through this!';
 
-  // Simplified challenge system for Poco M4 Pro (2 basic challenges)
-  List<String> challengeActions = ['smile', 'blink'];
+  List<String> challengeActions = ['smile', 'blink', 'turn_left', 'turn_right'];
   int currentActionIndex = 0;
   bool waitingForNeutral = false;
-  bool actionCompleted = false;
   bool challengeCompleted = false;
 
-  // Face detection results with improved tracking
+  bool _isInTurnChallenge = false;
+
   double? smilingProbability;
   double? leftEyeOpenProbability;
   double? rightEyeOpenProbability;
   double? headEulerAngleY;
   double? headEulerAngleX;
   double? headEulerAngleZ;
-
-  // Face positioning data
   Rect? faceBoundingBox;
-  double? faceConfidence;
-
-  // Current face and detection state
   Face? currentFace;
   DateTime? lastDetectionTime;
   bool isFaceDetected = false;
-  bool isPositionedCorrectly = false;
 
-  // Blink detection state tracking
-  bool wasBlinking = false;
-  int blinkCount = 0;
-  DateTime? lastBlinkTime;
+  final AntiSpoofingDetector _antiSpoofing = AntiSpoofingDetector();
+  bool isLivenessVerified = false;
+  String livenessStatus = 'Verifying liveness...';
 
-  // Action completion tracking
   Map<String, bool> completedActions = {};
   Map<String, DateTime> actionStartTimes = {};
 
-  // Animation controller for visual feedback
   late AnimationController _animationController;
 
-  // Poco M4 Pro optimized positioning thresholds
-  static const double centerTolerance =
-      0.2; // 20% tolerance (more lenient for testing)
-  static const double angleTolerance = 15.0; // 15 degrees (more lenient)
-  static const double minFaceSize = 0.2; // More lenient minimum face size
-  static const double maxFaceSize = 0.9; // More lenient maximum face size
+  static const double centerTolerance = 0.2;
+  static const double angleTolerance = 18.0;
+  static const double minFaceSize = 0.2;
+  static const double maxFaceSize = 0.85;
 
   @override
   void initState() {
     super.initState();
-
-    // Initialize animation controller for visual feedback
     _animationController = AnimationController(
       duration: const Duration(seconds: 2),
       vsync: this,
     )..repeat(reverse: true);
 
-    // Test ML Kit setup first
-    testMLKitSetup();
+    _initializeDetection();
+  }
 
-    // Initialize the camera controller
-    initializeCamera();
-    // Shuffle the challenge actions for security
+  Future<void> _initializeDetection() async {
+    await testMLKitSetup();
+    await initializeCamera();
+    _shuffleChallenges();
+    _initializeActionTracking();
+  }
+
+  void _shuffleChallenges() {
     challengeActions.shuffle();
-    // Initialize action tracking
+    if (!challengeActions.contains('smile')) {
+      challengeActions[0] = 'smile';
+    }
+    if (!challengeActions.contains('blink')) {
+      challengeActions[1] = 'blink';
+    }
+  }
+
+  void _initializeActionTracking() {
     for (String action in challengeActions) {
       completedActions[action] = false;
     }
   }
 
-  /// Initialize camera with Poco M4 Pro optimized settings
   Future<void> initializeCamera() async {
     try {
-      dev.log('📱 Initializing camera for Poco M4 Pro...');
+      dev.log('📱 Initializing camera...');
 
       final cameras = await availableCameras();
       if (cameras.isEmpty) {
-        dev.log('❌ No cameras available');
+        _showError('No cameras available');
         return;
       }
 
       final frontCamera = cameras.firstWhere(
         (camera) => camera.lensDirection == CameraLensDirection.front,
-        orElse: () => cameras.first, // Fallback to any camera
+        orElse: () => cameras.first,
       );
 
-      dev.log('📸 Found front camera: ${frontCamera.name}');
-      dev.log('📐 Camera resolution: ${frontCamera.sensorOrientation}°');
-
-      // Poco M4 Pro optimized camera settings
       cameraController = CameraController(
         frontCamera,
-        ResolutionPreset
-            .low, // Use low resolution for better performance on Helio G96
+        ResolutionPreset.medium,
         enableAudio: false,
-        imageFormatGroup:
-            ImageFormatGroup.yuv420, // Force YUV420 for better compatibility
+        imageFormatGroup: ImageFormatGroup.yuv420,
       );
 
-      dev.log('🔧 Camera controller created with YUV420 format');
-
       await cameraController.initialize();
-
-      dev.log('✅ Camera initialized successfully');
 
       if (mounted) {
         setState(() {
@@ -165,147 +135,396 @@ class _FaceDetectionViewState extends State<FaceDetectionView>
         startFaceDetection();
       }
     } catch (e) {
-      dev.log('💥 Camera initialization error: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Camera initialization failed: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+      _showError('Camera initialization failed: $e');
+    }
+  }
+
+  void startFaceDetection() {
+    if (isCameraInitialized) {
+      dev.log('🚀 Starting face detection stream...');
+      cameraController.startImageStream(_processFrame);
+    }
+  }
+
+  Future<void> _processFrame(CameraImage image) async {
+    if (frameSkipCounter % frameSkipRate != 0) {
+      frameSkipCounter++;
+      return;
+    }
+    frameSkipCounter++;
+
+    if (!isDetecting && mounted) {
+      isDetecting = true;
+      try {
+        await _detectFacesWithAntiSpoofing(image);
+      } catch (e) {
+        dev.log('⚠️ Frame processing error: $e');
+      } finally {
+        isDetecting = false;
       }
     }
   }
 
-  /// Start face detection with optimized throttling for Poco M4 Pro
-  void startFaceDetection() {
-    if (isCameraInitialized) {
-      dev.log('🚀 Starting optimized face detection stream...');
-
-      cameraController.startImageStream((CameraImage image) {
-        // Optimized frame skipping for Helio G96 performance
-        if (!isDetecting) {
-          isDetecting = true;
-          detectFacesOptimized(image)
-              .then((_) {
-                isDetecting = false;
-              })
-              .catchError((error) {
-                dev.log('⚠️ Face detection error: $error');
-                isDetecting = false;
-              });
-        }
-      });
-    }
-  }
-
-  /// Optimized face detection for Poco M4 Pro with proper YUV handling
-  Future<void> detectFacesOptimized(CameraImage image) async {
-    if (!mounted) return;
-
+  Future<void> _detectFacesWithAntiSpoofing(CameraImage image) async {
     try {
-      // Performance monitoring
       final startTime = DateTime.now();
 
-      dev.log('🔍 Processing frame: ${image.width}x${image.height}');
-      dev.log('📊 Format: ${image.format.group}');
-      dev.log('📋 Planes: ${image.planes.length}');
-
-      // Poco M4 Pro specific YUV handling
       InputImage? inputImage = await _createOptimizedInputImage(image);
+      if (inputImage == null) return;
 
-      if (inputImage == null) {
-        dev.log('❌ Failed to create InputImage');
+      List<Face> faces = await faceDetector.processImage(inputImage);
+      final validFaces = faces.where((face) => _isValidFace(face)).toList();
+
+      if (validFaces.isEmpty) {
+        _resetFaceState(
+          'No valid face detected - please position your face in the center',
+        );
         return;
       }
 
-      // Process with optimized detector settings
-      List<Face> faces = await faceDetector.processImage(inputImage);
+      final spoofingResult = await _antiSpoofing.analyzeFaces(
+        validFaces,
+        image,
+        DateTime.now(),
+      );
 
       final processingTime = DateTime.now()
           .difference(startTime)
           .inMilliseconds;
       dev.log('⚡ Processing time: ${processingTime}ms');
-      dev.log('👤 Faces detected: ${faces.length}');
 
-      if (faces.isNotEmpty) {
-        Face face = faces.first;
+      if (faces.isNotEmpty && spoofingResult.isLive) {
+        final face = faces.first;
+        _updateFaceState(face, image.width, image.height);
+        _checkFacePositioning(face, image.width, image.height);
 
-        // Update UI efficiently
-        if (mounted) {
-          setState(() {
-            currentFace = face;
-            lastDetectionTime = DateTime.now();
-            isFaceDetected = true;
-
-            // Update face data for UI
-            smilingProbability = face.smilingProbability;
-            leftEyeOpenProbability = face.leftEyeOpenProbability;
-            rightEyeOpenProbability = face.rightEyeOpenProbability;
-            headEulerAngleY = face.headEulerAngleY;
-            headEulerAngleX = face.headEulerAngleX;
-            headEulerAngleZ = face.headEulerAngleZ;
-            faceBoundingBox = face.boundingBox;
-          });
-        }
-
-        // Check positioning and challenges
-        checkFacePositioning(face, image.width, image.height);
         if (isPositionedCorrectly) {
-          checkChallenge(face);
+          await _processChallenge(face);
         }
       } else {
-        if (mounted) {
-          setState(() {
-            isFaceDetected = false;
-            facePositionFeedback = 'Position your face in the center';
-          });
-        }
+        _resetFaceState(spoofingResult.reason);
       }
-    } catch (e, stackTrace) {
-      dev.log('💥 Optimized detection error: $e');
-      dev.log('📚 Stack trace: $stackTrace');
-
-      if (mounted) {
-        setState(() {
-          isFaceDetected = false;
-          facePositionFeedback = 'Detection error - please try again';
-        });
-      }
+    } catch (e) {
+      dev.log('💥 Detection error: $e');
+      _resetFaceState('Detection error - please try again');
     }
   }
 
-  /// Create optimized InputImage for Poco M4 Pro with proper YUV handling
-  /// Enhanced with DeepSeek's stride handling and dynamic rotation
+  void _updateFaceState(Face face, int imageWidth, int imageHeight) {
+    if (!mounted) return;
+
+    setState(() {
+      currentFace = face;
+      lastDetectionTime = DateTime.now();
+      isFaceDetected = true;
+      smilingProbability = face.smilingProbability;
+      leftEyeOpenProbability = face.leftEyeOpenProbability;
+      rightEyeOpenProbability = face.rightEyeOpenProbability;
+      headEulerAngleY = face.headEulerAngleY;
+      headEulerAngleX = face.headEulerAngleX;
+      headEulerAngleZ = face.headEulerAngleZ;
+      faceBoundingBox = face.boundingBox;
+    });
+  }
+
+  void _resetFaceState(String feedback) {
+    if (!mounted) return;
+
+    setState(() {
+      isFaceDetected = false;
+      isPositionedCorrectly = false;
+      facePositionFeedback = feedback;
+      livenessStatus = 'Verifying liveness...';
+    });
+  }
+
+  void _checkFacePositioning(Face face, int imageWidth, int imageHeight) {
+    final box = face.boundingBox;
+    final centerX = box.left + box.width / 2;
+    final centerY = box.top + box.height / 2;
+
+    final inFrame = _isInFrame(box, imageWidth, imageHeight);
+    final centered = _isCentered(centerX, centerY, imageWidth, imageHeight);
+    final lookingStraight = _isLookingStraight(face);
+    final goodSize = _isGoodSize(box, imageWidth, imageHeight);
+
+    final withinGuideCircle = _isWithinGuideCircle(
+      centerX,
+      centerY,
+      imageWidth,
+      imageHeight,
+    );
+
+    final isTurnChallenge = _isInTurnChallenge;
+    final relaxedCentering = isTurnChallenge
+        ? _isCenteredRelaxed(centerX, centerY, imageWidth, imageHeight)
+        : centered;
+
+    final qualityGood = isTurnChallenge
+        ? inFrame && goodSize && withinGuideCircle
+        : inFrame &&
+              relaxedCentering &&
+              lookingStraight &&
+              goodSize &&
+              withinGuideCircle;
+
+    if (mounted) {
+      setState(() {
+        isFaceInFrame = inFrame;
+        isFaceCentered = relaxedCentering;
+        isFaceLookingStraight = lookingStraight;
+        isFaceQualityGood = qualityGood;
+        isPositionedCorrectly = qualityGood;
+
+        facePositionFeedback = _getPositioningFeedback(
+          face: face,
+          inFrame: inFrame,
+          centered: relaxedCentering,
+          lookingStraight: lookingStraight,
+          goodSize: goodSize,
+          withinGuideCircle: withinGuideCircle,
+          isTurnChallenge: isTurnChallenge,
+          centerX: centerX,
+          screenCenterX: imageWidth / 2,
+          centerY: centerY,
+          screenCenterY: imageHeight / 2,
+        );
+      });
+    }
+  }
+
+  bool _isInFrame(Rect box, int width, int height) {
+    return box.left >= 0 &&
+        box.top >= 0 &&
+        box.right <= width &&
+        box.bottom <= height;
+  }
+
+  bool _isCentered(double centerX, double centerY, int width, int height) {
+    final screenCenterX = width / 2;
+    final screenCenterY = height / 2;
+    final thresholdX = width * centerTolerance;
+    final thresholdY = height * centerTolerance;
+
+    return (centerX - screenCenterX).abs() < thresholdX &&
+        (centerY - screenCenterY).abs() < thresholdY;
+  }
+
+  bool _isLookingStraight(Face face) {
+    return (face.headEulerAngleY?.abs() ?? 0) < angleTolerance &&
+        (face.headEulerAngleX?.abs() ?? 0) < angleTolerance &&
+        (face.headEulerAngleZ?.abs() ?? 0) < angleTolerance;
+  }
+
+  bool _isGoodSize(Rect box, int width, int height) {
+    final faceArea = box.width * box.height;
+    final imageArea = width * height;
+    final ratio = faceArea / imageArea;
+    return ratio >= minFaceSize && ratio <= maxFaceSize;
+  }
+
+  bool _isValidFace(Face face) {
+    final hasEyes =
+        face.leftEyeOpenProbability != null ||
+        face.rightEyeOpenProbability != null;
+    final hasSmile = face.smilingProbability != null;
+    final hasHeadAngles =
+        face.headEulerAngleX != null ||
+        face.headEulerAngleY != null ||
+        face.headEulerAngleZ != null;
+
+    final box = face.boundingBox;
+    final aspectRatio = box.width / box.height;
+    final reasonableAspectRatio = aspectRatio >= 0.5 && aspectRatio <= 2.0;
+
+    final faceArea = box.width * box.height;
+    final reasonableSize = faceArea > 1000;
+
+    return hasEyes &&
+        hasSmile &&
+        hasHeadAngles &&
+        reasonableAspectRatio &&
+        reasonableSize;
+  }
+
+  bool _isWithinGuideCircle(
+    double centerX,
+    double centerY,
+    int imageWidth,
+    int imageHeight,
+  ) {
+    final screenCenterX = imageWidth / 2;
+    final screenCenterY = imageHeight / 2 - 50;
+    final guideRadius = imageWidth * 0.35;
+
+    final distance = sqrt(
+      pow(centerX - screenCenterX, 2) + pow(centerY - screenCenterY, 2),
+    );
+
+    return distance <= guideRadius;
+  }
+
+  bool _isCenteredRelaxed(
+    double centerX,
+    double centerY,
+    int width,
+    int height,
+  ) {
+    final screenCenterX = width / 2;
+    final screenCenterY = height / 2;
+    final relaxedThresholdX = width * (centerTolerance * 1.5);
+    final relaxedThresholdY = height * (centerTolerance * 1.5);
+
+    return (centerX - screenCenterX).abs() < relaxedThresholdX &&
+        (centerY - screenCenterY).abs() < relaxedThresholdY;
+  }
+
+  void _setChallengeState(String action) {
+    switch (action) {
+      case 'turn_left':
+      case 'turn_right':
+        _isInTurnChallenge = true;
+        break;
+      default:
+        _isInTurnChallenge = false;
+        break;
+    }
+  }
+
+  Future<void> _processChallenge(Face face) async {
+    if (waitingForNeutral) {
+      if (_isNeutralPosition(face)) {
+        setState(() {
+          waitingForNeutral = false;
+          _isInTurnChallenge = false;
+        });
+      }
+      return;
+    }
+
+    final currentAction = challengeActions[currentActionIndex];
+    _setChallengeState(currentAction);
+    actionStartTimes[currentAction] ??= DateTime.now();
+
+    final elapsed = DateTime.now().difference(actionStartTimes[currentAction]!);
+    if (elapsed.inSeconds > 15) {
+      _resetCurrentAction();
+      return;
+    }
+
+    if (_validateChallengeAction(face, currentAction)) {
+      await _completeAction(currentAction);
+    }
+  }
+
+  bool _validateChallengeAction(Face face, String action) {
+    switch (action) {
+      case 'smile':
+        return (face.smilingProbability ?? 0) > 0.55;
+      case 'blink':
+        return _detectBlink(face);
+      case 'turn_left':
+        return (face.headEulerAngleY ?? 0) > 18;
+      case 'turn_right':
+        return (face.headEulerAngleY ?? 0) < -18;
+      default:
+        return false;
+    }
+  }
+
+  bool _wasBlinking = false;
+  DateTime? _lastBlinkTime;
+
+  bool _detectBlink(Face face) {
+    final leftEye = face.leftEyeOpenProbability ?? 1.0;
+    final rightEye = face.rightEyeOpenProbability ?? 1.0;
+    final avgEyeOpen = (leftEye + rightEye) / 2;
+
+    if (avgEyeOpen < 0.35 && !_wasBlinking) {
+      _wasBlinking = true;
+      _lastBlinkTime = DateTime.now();
+    } else if (avgEyeOpen > 0.7 && _wasBlinking) {
+      _wasBlinking = false;
+
+      if (_lastBlinkTime != null &&
+          DateTime.now().difference(_lastBlinkTime!).inMilliseconds < 1000) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  bool _isNeutralPosition(Face face) {
+    return (face.smilingProbability ?? 0) < 0.35 &&
+        (face.leftEyeOpenProbability ?? 1.0) > 0.65 &&
+        (face.rightEyeOpenProbability ?? 1.0) > 0.65 &&
+        (face.headEulerAngleY?.abs() ?? 0) < 12;
+  }
+
+  Future<void> _completeAction(String action) async {
+    if (completedActions[action] == true) return;
+
+    setState(() {
+      completedActions[action] = true;
+      facePositionFeedback = 'Great job! Action completed successfully! 🎉';
+    });
+
+    await Future.delayed(const Duration(milliseconds: 1000));
+
+    if (currentActionIndex < challengeActions.length - 1) {
+      setState(() {
+        currentActionIndex++;
+        waitingForNeutral = true;
+      });
+    } else {
+      _completeLivenessVerification();
+    }
+  }
+
+  void _resetCurrentAction() {
+    final currentAction = challengeActions[currentActionIndex];
+    actionStartTimes.remove(currentAction);
+    setState(() {
+      facePositionFeedback = 'Action timeout - please try again';
+      _isInTurnChallenge = false;
+    });
+  }
+
+  void _completeLivenessVerification() {
+    setState(() {
+      challengeCompleted = true;
+      livenessStatus = '🎉 Liveness verified successfully! 🎉';
+    });
+
+    Timer(const Duration(seconds: 2), () {
+      if (mounted) {
+        Navigator.pop(context, true);
+      }
+    });
+  }
+
   Future<InputImage?> _createOptimizedInputImage(CameraImage image) async {
     try {
-      // Try multiple formats in order of preference for Poco M4 Pro
       List<InputImageFormat> formatsToTry = [
-        InputImageFormat
-            .nv21, // Most reliable for Android (DeepSeek's recommendation)
-        InputImageFormat.yuv420, // Alternative
-        InputImageFormat.bgra8888, // Fallback
+        InputImageFormat.nv21,
+        InputImageFormat.yuv420,
+        InputImageFormat.bgra8888,
       ];
 
       for (InputImageFormat format in formatsToTry) {
         try {
-          dev.log('🎨 Trying format: $format');
-
           InputImage? inputImage = await _createInputImageWithFormat(
             image,
             format,
           );
           if (inputImage != null) {
-            dev.log('✅ Successfully created InputImage with format: $format');
             return inputImage;
           }
         } catch (e) {
-          dev.log('⚠️ Format $format failed: $e');
           continue;
         }
       }
-
-      dev.log('❌ All formats failed');
       return null;
     } catch (e) {
       dev.log('💥 InputImage creation error: $e');
@@ -313,7 +532,6 @@ class _FaceDetectionViewState extends State<FaceDetectionView>
     }
   }
 
-  /// Create InputImage with specific format (enhanced with DeepSeek's improvements)
   Future<InputImage?> _createInputImageWithFormat(
     CameraImage image,
     InputImageFormat format,
@@ -343,60 +561,46 @@ class _FaceDetectionViewState extends State<FaceDetectionView>
         bytes: bytes,
         metadata: InputImageMetadata(
           size: Size(image.width.toDouble(), image.height.toDouble()),
-          rotation:
-              _getImageRotationDynamic(), // Enhanced with dynamic rotation
+          rotation: _getImageRotationDynamic(),
           format: format,
           bytesPerRow: bytesPerRow,
         ),
       );
     } catch (e) {
-      dev.log('💥 Error creating InputImage with format $format: $e');
       return null;
     }
   }
 
-  /// Enhanced NV21 format bytes with DeepSeek's stride handling
   Uint8List _createNV21BytesEnhanced(CameraImage image) {
-    dev.log('🎨 Creating enhanced NV21 bytes with proper stride handling...');
-
     final yPlane = image.planes[0];
     final uPlane = image.planes[1];
     final vPlane = image.planes[2];
 
     final ySize = image.width * image.height;
     final uvSize = (image.width * image.height) ~/ 4;
-
     final nv21Bytes = Uint8List(ySize + 2 * uvSize);
 
-    // Copy Y plane (luminance) with stride handling
     _copyPlaneWithStride(yPlane, nv21Bytes, 0, image.width, image.height);
 
-    // Interleave U and V planes with enhanced stride handling (DeepSeek's approach)
     int uvIndex = ySize;
     for (int i = 0; i < uvSize; i++) {
       final uvPixelIndex =
           i ~/ image.width * (uPlane.bytesPerRow ~/ 2) + i % image.width;
 
-      // Ensure we don't go out of bounds
       if (uvPixelIndex < vPlane.bytes.length &&
           uvPixelIndex < uPlane.bytes.length) {
-        nv21Bytes[uvIndex++] = vPlane.bytes[uvPixelIndex]; // V first
-        nv21Bytes[uvIndex++] = uPlane.bytes[uvPixelIndex]; // U second
+        nv21Bytes[uvIndex++] = vPlane.bytes[uvPixelIndex];
+        nv21Bytes[uvIndex++] = uPlane.bytes[uvPixelIndex];
       } else {
-        // Fallback to simple indexing if stride calculation fails
         nv21Bytes[uvIndex++] = vPlane.bytes[i % vPlane.bytes.length];
         nv21Bytes[uvIndex++] = uPlane.bytes[i % uPlane.bytes.length];
       }
     }
 
-    dev.log('✅ Enhanced NV21 bytes created: ${nv21Bytes.length} total bytes');
     return nv21Bytes;
   }
 
-  /// Enhanced YUV420 format bytes with better stride handling
   Uint8List _createYUV420BytesEnhanced(CameraImage image) {
-    dev.log('🎨 Creating enhanced YUV420 bytes...');
-
     final yPlane = image.planes[0];
     final uPlane = image.planes[1];
     final vPlane = image.planes[2];
@@ -404,13 +608,9 @@ class _FaceDetectionViewState extends State<FaceDetectionView>
     final ySize = image.width * image.height;
     final uSize = (image.width * image.height) ~/ 4;
     final vSize = (image.width * image.height) ~/ 4;
-
     final yuvBytes = Uint8List(ySize + uSize + vSize);
 
-    // Copy Y plane with stride handling
     _copyPlaneWithStride(yPlane, yuvBytes, 0, image.width, image.height);
-
-    // Copy U plane with stride handling
     _copyPlaneWithStride(
       uPlane,
       yuvBytes,
@@ -418,8 +618,6 @@ class _FaceDetectionViewState extends State<FaceDetectionView>
       image.width ~/ 2,
       image.height ~/ 2,
     );
-
-    // Copy V plane with stride handling
     _copyPlaneWithStride(
       vPlane,
       yuvBytes,
@@ -428,11 +626,9 @@ class _FaceDetectionViewState extends State<FaceDetectionView>
       image.height ~/ 2,
     );
 
-    dev.log('✅ Enhanced YUV420 bytes created: ${yuvBytes.length} total bytes');
     return yuvBytes;
   }
 
-  /// Helper method to copy plane data with proper stride handling
   void _copyPlaneWithStride(
     Plane plane,
     Uint8List destination,
@@ -459,36 +655,12 @@ class _FaceDetectionViewState extends State<FaceDetectionView>
     }
   }
 
-  /// Enhanced dynamic image rotation calculation (DeepSeek's approach)
   InputImageRotation _getImageRotationDynamic() {
-    try {
-      // For front camera on most Android devices, we need 270 degrees
-      // This accounts for the camera sensor orientation
-      // We'll use a fixed value for now since cameraDescription isn't available
-      dev.log('📐 Using fixed rotation: 270° for front camera');
-      return InputImageRotation.rotation270deg;
-    } catch (e) {
-      dev.log('⚠️ Error getting sensor orientation: $e, using 270deg');
-      return InputImageRotation.rotation270deg; // Fallback for front camera
-    }
+    return InputImageRotation.rotation270deg;
   }
 
-  /// Legacy method - now optimized for Poco M4 Pro
-  Future<void> detectFaces(CameraImage image) async {
-    return detectFacesOptimized(image);
-  }
-
-  /// Legacy debug method - kept for compatibility
-  Future<void> detectFacesDebug(CameraImage image) async {
-    return detectFacesOptimized(image);
-  }
-
-  // Add this test method to validate ML Kit setup
   Future<void> testMLKitSetup() async {
     try {
-      dev.log('🧪 Testing ML Kit setup...');
-
-      // Test with a simple detector creation
       final testDetector = FaceDetector(
         options: FaceDetectorOptions(
           performanceMode: FaceDetectorMode.fast,
@@ -497,620 +669,578 @@ class _FaceDetectionViewState extends State<FaceDetectionView>
           minFaceSize: 0.1,
         ),
       );
-
-      dev.log('✅ Face detector created successfully');
       await testDetector.close();
-      dev.log('✅ Face detector disposed successfully');
-      dev.log('🎉 ML Kit setup is working!');
+      dev.log('✅ ML Kit setup verified');
     } catch (e) {
       dev.log('💥 ML Kit setup error: $e');
-      dev.log('❌ ML Kit may not be properly configured');
     }
   }
 
-  /// Update face detection results with comprehensive data
-  void updateFaceDetectionResults(Face face, int imageWidth, int imageHeight) {
-    if (mounted) {
-      setState(() {
-        smilingProbability = face.smilingProbability;
-        leftEyeOpenProbability = face.leftEyeOpenProbability;
-        rightEyeOpenProbability = face.rightEyeOpenProbability;
-        headEulerAngleY = face.headEulerAngleY; // Left/Right rotation
-        headEulerAngleX = face.headEulerAngleX; // Up/Down rotation
-        headEulerAngleZ = face.headEulerAngleZ; // Tilt
-        faceBoundingBox = face.boundingBox;
-        faceConfidence = face.trackingId
-            ?.toDouble(); // Use tracking ID as confidence
-      });
-    }
-  }
-
-  /// Enhanced face positioning detection with production-optimized thresholds
-  void checkFacePositioning(Face face, int imageWidth, int imageHeight) {
-    final box = face.boundingBox;
-    final centerX = box.left + box.width / 2;
-    final centerY = box.top + box.height / 2;
-
-    // Check if face is in frame with improved boundary detection
-    final inFrame =
-        box.left >= 0 &&
-        box.top >= 0 &&
-        box.right <= imageWidth &&
-        box.bottom <= imageHeight;
-
-    // Enhanced centering check with production-optimized tolerance
-    final screenCenterX = imageWidth / 2;
-    final screenCenterY = imageHeight / 2;
-    final centerThresholdX = imageWidth * centerTolerance;
-    final centerThresholdY = imageHeight * centerTolerance;
-
-    final centered =
-        (centerX - screenCenterX).abs() < centerThresholdX &&
-        (centerY - screenCenterY).abs() < centerThresholdY;
-
-    // Enhanced head angle validation with precise thresholds
-    final lookingStraight =
-        (face.headEulerAngleY?.abs() ?? 0) < angleTolerance &&
-        (face.headEulerAngleX?.abs() ?? 0) < angleTolerance &&
-        (face.headEulerAngleZ?.abs() ?? 0) < angleTolerance;
-
-    // Enhanced face size validation with optimal range
-    final faceArea = box.width * box.height;
-    final imageArea = imageWidth * imageHeight;
-    final faceSizeRatio = faceArea / imageArea;
-
-    final goodSize =
-        faceSizeRatio >= minFaceSize && faceSizeRatio <= maxFaceSize;
-
-    // Enhanced quality assessment with weighted scoring
-    final qualityScore = _calculateQualityScore(
-      inFrame: inFrame,
-      centered: centered,
-      lookingStraight: lookingStraight,
-      goodSize: goodSize,
-      faceSizeRatio: faceSizeRatio,
-    );
-
-    if (mounted) {
-      setState(() {
-        isFaceInFrame = inFrame;
-        isFaceCentered = centered;
-        isFaceLookingStraight = lookingStraight;
-        isFaceQualityGood = qualityScore >= 0.8; // 80% quality threshold
-        isPositionedCorrectly =
-            inFrame && centered && lookingStraight && goodSize;
-
-        // Enhanced user feedback with specific guidance
-        facePositionFeedback = _getPositioningFeedback(
-          face: face,
-          inFrame: inFrame,
-          centered: centered,
-          lookingStraight: lookingStraight,
-          goodSize: goodSize,
-          faceSizeRatio: faceSizeRatio,
-          centerX: centerX,
-          screenCenterX: screenCenterX,
-          centerY: centerY,
-          screenCenterY: screenCenterY,
-        );
-      });
-    }
-  }
-
-  /// Calculate quality score based on positioning factors
-  double _calculateQualityScore({
-    required bool inFrame,
-    required bool centered,
-    required bool lookingStraight,
-    required bool goodSize,
-    required double faceSizeRatio,
-  }) {
-    if (!inFrame) return 0.0;
-
-    double score = 0.0;
-
-    // Centering weight: 30%
-    if (centered) score += 0.3;
-
-    // Head angle weight: 25%
-    if (lookingStraight) score += 0.25;
-
-    // Face size weight: 25%
-    if (goodSize) score += 0.25;
-
-    // Optimal size bonus: 20%
-    final optimalSize = (minFaceSize + maxFaceSize) / 2;
-    final sizeDeviation = (faceSizeRatio - optimalSize).abs() / optimalSize;
-    if (sizeDeviation < 0.2) score += 0.2; // Within 20% of optimal
-
-    return score;
-  }
-
-  /// Enhanced positioning feedback with specific guidance
   String _getPositioningFeedback({
     required Face face,
     required bool inFrame,
     required bool centered,
     required bool lookingStraight,
     required bool goodSize,
-    required double faceSizeRatio,
+    required bool withinGuideCircle,
+    required bool isTurnChallenge,
     required double centerX,
     required double screenCenterX,
     required double centerY,
     required double screenCenterY,
   }) {
-    if (!inFrame) {
-      return 'Face not in frame - please move into view';
-    }
+    if (!inFrame) return 'Face not in frame - please move into view 📱';
 
     if (!centered) {
-      final horizontalDirection = centerX < screenCenterX ? 'right' : 'left';
-      final verticalDirection = centerY < screenCenterY ? 'down' : 'up';
-
-      if ((centerX - screenCenterX).abs() > (centerY - screenCenterY).abs()) {
-        return 'Move $horizontalDirection to center your face';
-      } else {
-        return 'Move $verticalDirection to center your face';
-      }
+      return centerX < screenCenterX
+          ? 'Move right to center your face - you\'re almost there!'
+          : 'Move left to center your face - you\'re almost there!';
     }
 
-    if (!lookingStraight) {
-      if ((face.headEulerAngleY?.abs() ?? 0) > angleTolerance) {
-        return 'Look straight at the camera';
-      } else if ((face.headEulerAngleX?.abs() ?? 0) > angleTolerance) {
-        return 'Keep your head level';
-      } else {
-        return 'Don\'t tilt your head';
-      }
-    }
+    if (!lookingStraight) return 'Look straight ahead - keep your head level!';
 
     if (!goodSize) {
-      if (faceSizeRatio < minFaceSize) {
-        return 'Move closer to the camera';
-      } else {
-        return 'Move further from the camera';
-      }
+      return face.boundingBox.width * face.boundingBox.height < 10000
+          ? 'Move closer to the camera - we need a clear view!'
+          : 'Move back from the camera - you\'re too close!';
     }
 
-    return 'Perfect! Ready for verification';
+    if (!withinGuideCircle) {
+      if (isTurnChallenge) {
+        return 'Keep your face in the guide circle while turning - you\'re doing great!';
+      }
+      return 'Position your face within the guide circle - you\'re almost there!';
+    }
+
+    if (isTurnChallenge) {
+      return 'Perfect! Now turn back to center when ready!';
+    }
+
+    return 'Perfect! You\'re all set for verification! ✨';
   }
 
-  /// Optimized challenge action validation for Poco M4 Pro
-  bool _validateChallengeAction(Face face, String action) {
-    // Poco M4 Pro optimized thresholds (more lenient for testing)
-    const double smileThreshold = 0.6; // Lower threshold for easier detection
-    const double eyeClosedThreshold = 0.4; // More lenient blink detection
-
+  String getActionDescription(String action) {
     switch (action) {
       case 'smile':
-        return face.smilingProbability != null &&
-            face.smilingProbability! > smileThreshold;
-
+        return 'smile naturally - just a gentle smile!';
       case 'blink':
-        return _detectEnhancedBlink(face, eyeClosedThreshold);
-
+        return 'blink your eyes - one natural blink is enough!';
+      case 'turn_left':
+        return 'turn your head left - stay in frame and turn back to center!';
+      case 'turn_right':
+        return 'turn your head right - stay in frame and turn back to center!';
       default:
-        return false;
+        return action;
     }
   }
 
-  /// Enhanced blink detection with consecutive frame validation
-  bool _detectEnhancedBlink(Face face, double threshold) {
-    final leftEye = face.leftEyeOpenProbability ?? 1.0;
-    final rightEye = face.rightEyeOpenProbability ?? 1.0;
-
-    // Check if either eye is closed
-    final isBlinking = leftEye < threshold || rightEye < threshold;
-
-    if (isBlinking && !wasBlinking) {
-      // Start of blink
-      wasBlinking = true;
-      blinkCount++;
-      lastBlinkTime = DateTime.now();
-    } else if (!isBlinking && wasBlinking) {
-      // End of blink
-      wasBlinking = false;
+  void _showError(String message) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message), backgroundColor: Colors.red),
+      );
     }
-
-    // Require at least one complete blink
-    return blinkCount >= 1;
-  }
-
-  /// Enhanced challenge checking with production-optimized thresholds
-  void checkChallenge(Face face) async {
-    // Wait for neutral position if required
-    if (waitingForNeutral) {
-      if (isNeutralPosition(face)) {
-        if (mounted) {
-          setState(() {
-            waitingForNeutral = false;
-          });
-        }
-      } else {
-        return; // Still waiting for neutral
-      }
-    }
-
-    // Get current action
-    String currentAction = challengeActions[currentActionIndex];
-
-    // Initialize action start time if not set
-    if (!actionStartTimes.containsKey(currentAction)) {
-      actionStartTimes[currentAction] = DateTime.now();
-    }
-
-    // Enhanced timeout handling (15 seconds with warning)
-    final actionStartTime = actionStartTimes[currentAction]!;
-    final elapsedSeconds = DateTime.now().difference(actionStartTime).inSeconds;
-
-    if (elapsedSeconds > 15) {
-      // Reset action if timeout
-      actionStartTimes.remove(currentAction);
-      if (mounted) {
-        setState(() {
-          facePositionFeedback = 'Action timeout - please try again';
-        });
-      }
-      return;
-    }
-
-    // Enhanced action validation with consecutive frame requirements
-    bool actionCompleted = _validateChallengeAction(face, currentAction);
-
-    // Handle action completion with enhanced feedback
-    if (actionCompleted && !completedActions[currentAction]!) {
-      if (mounted) {
-        setState(() {
-          completedActions[currentAction] = true;
-          actionCompleted = true;
-          facePositionFeedback = 'Great! Action completed successfully';
-        });
-      }
-
-      // Enhanced transition with better UX
-      await Future.delayed(const Duration(milliseconds: 800));
-
-      if (currentActionIndex < challengeActions.length - 1) {
-        if (mounted) {
-          setState(() {
-            currentActionIndex++;
-            waitingForNeutral = true;
-            actionCompleted = false;
-          });
-        }
-      } else {
-        // All challenges completed
-        if (mounted) {
-          setState(() {
-            challengeCompleted = true;
-          });
-
-          // Return success
-          Navigator.pop(context, true);
-        }
-      }
-    }
-  }
-
-  /// Enhanced blink detection with state tracking
-  bool detectBlink(Face face) {
-    final leftEyeOpen = face.leftEyeOpenProbability ?? 1.0;
-    final rightEyeOpen = face.rightEyeOpenProbability ?? 1.0;
-    final avgEyeOpen = (leftEyeOpen + rightEyeOpen) / 2;
-
-    // Detect blink transition (eyes closed then opened)
-    if (avgEyeOpen < 0.3 && !wasBlinking) {
-      // Eyes just closed
-      wasBlinking = true;
-      lastBlinkTime = DateTime.now();
-    } else if (avgEyeOpen > 0.7 && wasBlinking) {
-      // Eyes opened after being closed
-      wasBlinking = false;
-      blinkCount++;
-
-      // Consider blink detected if it was recent
-      if (lastBlinkTime != null &&
-          DateTime.now().difference(lastBlinkTime!).inMilliseconds < 1000) {
-        return true;
-      }
-    }
-
-    return false;
-  }
-
-  /// Check if face is in neutral position
-  bool isNeutralPosition(Face face) {
-    return (face.smilingProbability == null ||
-            face.smilingProbability! < 0.2) &&
-        (face.leftEyeOpenProbability == null ||
-            face.leftEyeOpenProbability! > 0.6) &&
-        (face.rightEyeOpenProbability == null ||
-            face.rightEyeOpenProbability! > 0.6) &&
-        (face.headEulerAngleY == null || face.headEulerAngleY!.abs() < 10) &&
-        (face.headEulerAngleX == null || face.headEulerAngleX!.abs() < 10) &&
-        (face.headEulerAngleZ == null || face.headEulerAngleZ!.abs() < 10);
   }
 
   @override
   void dispose() {
-    // Clean up resources
     _animationController.dispose();
     if (isCameraInitialized) {
       cameraController.stopImageStream();
       cameraController.dispose();
     }
     faceDetector.close();
+    _antiSpoofing.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.black,
       appBar: AppBar(
-        backgroundColor: Colors.amberAccent,
-        toolbarHeight: 70,
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        title: const Text(
+          'Verify Your Identity',
+          style: TextStyle(fontWeight: FontWeight.w600),
+        ),
         centerTitle: true,
-        title: const Text("Verify Your Identity"),
       ),
       body: isCameraInitialized
           ? Stack(
               children: [
-                // Camera preview
-                Positioned.fill(child: CameraPreview(cameraController)),
+                Positioned.fill(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(20),
+                    child: CameraPreview(cameraController),
+                  ),
+                ),
 
-                // Enhanced face mask overlay with animation
                 AnimatedBuilder(
                   animation: _animationController,
                   builder: (context, child) {
                     return CustomPaint(
-                      painter: HeadMaskPainter(
+                      painter: EnhancedHeadMaskPainter(
                         animationValue: _animationController.value,
                         isFaceQualityGood: isFaceQualityGood,
                         faceBoundingBox: faceBoundingBox,
+                        isLivenessVerified: isLivenessVerified,
+                        isFaceDetected: isFaceDetected,
                       ),
                       child: Container(),
                     );
                   },
                 ),
 
-                // Top instruction panel
-                Positioned(
-                  top: 16,
-                  left: 16,
-                  right: 16,
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.black87,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Column(
-                      children: [
-                        // Face positioning feedback
-                        Text(
-                          facePositionFeedback,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w500,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 8),
+                _buildInstructionPanel(),
 
-                        // Challenge instruction
-                        if (isFaceQualityGood)
-                          Text(
-                            'Please ${getActionDescription(challengeActions[currentActionIndex])}',
-                            style: const TextStyle(
-                              color: Colors.amberAccent,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
+                _buildStatusPanel(),
 
-                        const SizedBox(height: 4),
-
-                        // Enhanced progress indicator
-                        Column(
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                for (
-                                  int i = 0;
-                                  i < challengeActions.length;
-                                  i++
-                                )
-                                  Container(
-                                    margin: const EdgeInsets.symmetric(
-                                      horizontal: 2,
-                                    ),
-                                    width: 8,
-                                    height: 8,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      color: i < currentActionIndex
-                                          ? Colors.green
-                                          : i == currentActionIndex
-                                          ? Colors.amberAccent
-                                          : Colors.grey.shade600,
-                                    ),
-                                  ),
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Step ${currentActionIndex + 1} of ${challengeActions.length}',
-                              style: const TextStyle(
-                                color: Colors.white70,
-                                fontSize: 14,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
+                _buildAntiSpoofingIndicator(),
+              ],
+            )
+          : const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(color: Colors.amberAccent),
+                  SizedBox(height: 16),
+                  Text(
+                    'Initializing camera...',
+                    style: TextStyle(color: Colors.white, fontSize: 16),
                   ),
+                ],
+              ),
+            ),
+    );
+  }
+
+  Widget _buildInstructionPanel() {
+    return Positioned(
+      top: 20,
+      left: 16,
+      right: 16,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.8),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isFaceQualityGood ? Colors.green : Colors.orange,
+            width: 2,
+          ),
+        ),
+        child: Column(
+          children: [
+            Text(
+              facePositionFeedback,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+              ),
+              textAlign: TextAlign.center,
+            ),
+
+            if (isFaceQualityGood) ...[
+              const SizedBox(height: 12),
+              Text(
+                'Please ${getActionDescription(challengeActions[currentActionIndex])}',
+                style: const TextStyle(
+                  color: Colors.amberAccent,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
                 ),
+                textAlign: TextAlign.center,
+              ),
 
-                // Bottom debug panel
-                Positioned(
-                  bottom: 16,
-                  left: 16,
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.black87,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Face quality indicators
-                        Row(
-                          children: [
-                            Icon(
-                              isFaceInFrame ? Icons.check_circle : Icons.cancel,
-                              color: isFaceInFrame ? Colors.green : Colors.red,
-                              size: 16,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              'In Frame',
-                              style: TextStyle(
-                                color: isFaceInFrame
-                                    ? Colors.green
-                                    : Colors.red,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                        Row(
-                          children: [
-                            Icon(
-                              isFaceCentered
-                                  ? Icons.check_circle
-                                  : Icons.cancel,
-                              color: isFaceCentered ? Colors.green : Colors.red,
-                              size: 16,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Centered',
-                              style: TextStyle(
-                                color: isFaceCentered
-                                    ? Colors.green
-                                    : Colors.red,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                        Row(
-                          children: [
-                            Icon(
-                              isFaceLookingStraight
-                                  ? Icons.check_circle
-                                  : Icons.cancel,
-                              color: isFaceLookingStraight
-                                  ? Colors.green
-                                  : Colors.red,
-                              size: 16,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Looking Straight',
-                              style: TextStyle(
-                                color: isFaceLookingStraight
-                                    ? Colors.green
-                                    : Colors.red,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-
-                        const SizedBox(height: 8),
-
-                        // Face detection values
-                        Text(
-                          'Smile: ${smilingProbability != null ? (smilingProbability! * 100).toStringAsFixed(1) : 'N/A'}%',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                          ),
-                        ),
-                        Text(
-                          'Eyes: ${leftEyeOpenProbability != null && rightEyeOpenProbability != null ? (((leftEyeOpenProbability! + rightEyeOpenProbability!) / 2) * 100).toStringAsFixed(1) : 'N/A'}%',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                          ),
-                        ),
-                        Text(
-                          'Head Y: ${headEulerAngleY != null ? headEulerAngleY!.toStringAsFixed(1) : 'N/A'}°',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                          ),
-                        ),
-                        Text(
-                          'Head X: ${headEulerAngleX != null ? headEulerAngleX!.toStringAsFixed(1) : 'N/A'}°',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
+              // Show turn challenge indicator
+              if (_isInTurnChallenge) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withValues(alpha: 0.8),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '🔄 Turn Challenge Active - Centering Relaxed',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
               ],
-            )
-          : const Center(child: CircularProgressIndicator()),
+            ],
+
+            const SizedBox(height: 12),
+            _buildProgressIndicator(),
+          ],
+        ),
+      ),
     );
   }
 
-  /// Get user-friendly description of challenge action
-  String getActionDescription(String action) {
-    switch (action) {
-      case 'smile':
-        return 'smile naturally';
-      case 'blink':
-        return 'blink your eyes';
-      default:
-        return '';
-    }
+  Widget _buildProgressIndicator() {
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            for (int i = 0; i < challengeActions.length; i++)
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 3),
+                width: 12,
+                height: 12,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: i < currentActionIndex
+                      ? Colors.green
+                      : i == currentActionIndex
+                      ? Colors.amberAccent
+                      : Colors.grey.shade600,
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.3),
+                    width: 1,
+                  ),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Step ${currentActionIndex + 1} of ${challengeActions.length}',
+          style: const TextStyle(
+            color: Colors.white70,
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatusPanel() {
+    return Positioned(
+      bottom: 20,
+      left: 16,
+      right: 16,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.8),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _buildQualityIndicator('Frame', isFaceInFrame),
+                _buildQualityIndicator('Center', isFaceCentered),
+                _buildQualityIndicator('Straight', isFaceLookingStraight),
+                _buildQualityIndicator('Size', _isGoodSizeFromState()),
+              ],
+            ),
+
+            const SizedBox(height: 12),
+
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _buildDetectionValue(
+                  'Smile',
+                  smilingProbability != null
+                      ? '${(smilingProbability! * 100).toStringAsFixed(0)}%'
+                      : 'N/A',
+                ),
+                _buildDetectionValue(
+                  'Eyes',
+                  leftEyeOpenProbability != null &&
+                          rightEyeOpenProbability != null
+                      ? '${(((leftEyeOpenProbability! + rightEyeOpenProbability!) / 2) * 100).toStringAsFixed(0)}%'
+                      : 'N/A',
+                ),
+                _buildDetectionValue(
+                  'Angle',
+                  headEulerAngleY != null
+                      ? '${headEulerAngleY!.toStringAsFixed(0)}°'
+                      : 'N/A',
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQualityIndicator(String label, bool isGood) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          isGood ? Icons.check_circle : Icons.cancel,
+          color: isGood ? Colors.green : Colors.red,
+          size: 20,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: TextStyle(
+            color: isGood ? Colors.green : Colors.red,
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDetectionValue(String label, String value) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          value,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        Text(
+          label,
+          style: const TextStyle(color: Colors.white70, fontSize: 12),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAntiSpoofingIndicator() {
+    return Positioned(
+      top: 120,
+      right: 16,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: isLivenessVerified
+              ? Colors.green.withValues(alpha: 0.9)
+              : Colors.orange.withValues(alpha: 0.9),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              isLivenessVerified ? Icons.verified_user : Icons.security,
+              color: Colors.white,
+              size: 16,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              livenessStatus,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  bool _isGoodSizeFromState() {
+    if (faceBoundingBox == null) return false;
+    final screenSize = MediaQuery.of(context).size;
+    final faceArea = faceBoundingBox!.width * faceBoundingBox!.height;
+    final screenArea = screenSize.width * screenSize.height;
+    final ratio = faceArea / screenArea;
+    return ratio >= minFaceSize && ratio <= maxFaceSize;
   }
 }
 
-/// Enhanced custom painter for animated face mask overlay
-class HeadMaskPainter extends CustomPainter {
+class AntiSpoofingDetector {
+  final List<FaceHistoryEntry> _faceHistory = [];
+  static const int maxHistoryLength = 30;
+  static const int minHistoryForAnalysis = 10;
+
+  static const double minMotionVariance = 0.3;
+  static const double maxStaticFrames = 0.8;
+
+  final List<double> _faceSizeHistory = [];
+  static const double minDepthVariation = 0.015;
+
+  DateTime? _firstDetection;
+  static const int minVerificationTime = 2;
+
+  Future<LivenessResult> analyzeFaces(
+    List<Face> faces,
+    CameraImage image,
+    DateTime timestamp,
+  ) async {
+    if (faces.isEmpty) {
+      return LivenessResult(false, 'No face detected');
+    }
+
+    final face = faces.first;
+
+    _addToHistory(face, timestamp);
+
+    if (_faceHistory.length < minHistoryForAnalysis) {
+      return LivenessResult(false, 'Collecting data...');
+    }
+
+    if (!_detectNaturalMotion()) {
+      return LivenessResult(false, 'Please move naturally');
+    }
+
+    if (!_detectDepthVariation()) {
+      return LivenessResult(false, 'Move closer/further slightly');
+    }
+
+    if (!_validateTiming()) {
+      return LivenessResult(false, 'Verifying authenticity...');
+    }
+
+    return LivenessResult(true, 'Live person detected');
+  }
+
+  void _addToHistory(Face face, DateTime timestamp) {
+    _faceHistory.add(
+      FaceHistoryEntry(
+        face: face,
+        timestamp: timestamp,
+        headRotation: _calculateHeadRotation(face),
+        faceSize: _calculateFaceSize(face),
+      ),
+    );
+
+    if (_faceHistory.length > maxHistoryLength) {
+      _faceHistory.removeAt(0);
+    }
+
+    _faceSizeHistory.add(_calculateFaceSize(face));
+    if (_faceSizeHistory.length > maxHistoryLength) {
+      _faceSizeHistory.removeAt(0);
+    }
+
+    _firstDetection ??= timestamp;
+  }
+
+  double _calculateHeadRotation(Face face) {
+    final yaw = face.headEulerAngleY ?? 0;
+    final pitch = face.headEulerAngleX ?? 0;
+    final roll = face.headEulerAngleZ ?? 0;
+    return sqrt(yaw * yaw + pitch * pitch + roll * roll);
+  }
+
+  double _calculateFaceSize(Face face) {
+    final box = face.boundingBox;
+    return sqrt(box.width * box.width + box.height * box.height);
+  }
+
+  bool _detectNaturalMotion() {
+    if (_faceHistory.length < minHistoryForAnalysis) return false;
+
+    final rotations = _faceHistory.map((e) => e.headRotation).toList();
+    final mean = rotations.reduce((a, b) => a + b) / rotations.length;
+    final variance =
+        rotations.map((r) => pow(r - mean, 2)).reduce((a, b) => a + b) /
+        rotations.length;
+
+    if (variance < minMotionVariance) {
+      return false;
+    }
+
+    int staticFrames = 0;
+    for (int i = 1; i < _faceHistory.length; i++) {
+      final prev = _faceHistory[i - 1];
+      final curr = _faceHistory[i];
+      if ((curr.headRotation - prev.headRotation).abs() < 0.1) {
+        staticFrames++;
+      }
+    }
+
+    final staticRatio = staticFrames / _faceHistory.length;
+    return staticRatio < maxStaticFrames;
+  }
+
+  bool _detectDepthVariation() {
+    if (_faceSizeHistory.length < minHistoryForAnalysis) return false;
+
+    final minSize = _faceSizeHistory.reduce(min);
+    final maxSize = _faceSizeHistory.reduce(max);
+    final sizeVariation = (maxSize - minSize) / maxSize;
+
+    return sizeVariation >= minDepthVariation;
+  }
+
+  bool _validateTiming() {
+    if (_firstDetection == null) return false;
+    final elapsed = DateTime.now().difference(_firstDetection!);
+    return elapsed.inSeconds >= minVerificationTime;
+  }
+
+  void dispose() {
+    _faceHistory.clear();
+    _faceSizeHistory.clear();
+  }
+}
+
+class FaceHistoryEntry {
+  final Face face;
+  final DateTime timestamp;
+  final double headRotation;
+  final double faceSize;
+
+  FaceHistoryEntry({
+    required this.face,
+    required this.timestamp,
+    required this.headRotation,
+    required this.faceSize,
+  });
+}
+
+class LivenessResult {
+  final bool isLive;
+  final String reason;
+
+  LivenessResult(this.isLive, this.reason);
+}
+
+class EnhancedHeadMaskPainter extends CustomPainter {
   final double animationValue;
   final bool isFaceQualityGood;
   final Rect? faceBoundingBox;
+  final bool isLivenessVerified;
+  final bool isFaceDetected;
 
-  HeadMaskPainter({
+  EnhancedHeadMaskPainter({
     required this.animationValue,
     required this.isFaceQualityGood,
     this.faceBoundingBox,
+    required this.isLivenessVerified,
+    required this.isFaceDetected,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2 - 50);
-
-    // Animated radius based on face quality
     final baseRadius = size.width * 0.35;
-    final animatedRadius = baseRadius + (animationValue * 15);
+    final animatedRadius = baseRadius + (animationValue * 10);
 
-    // Draw background mask
     final maskPaint = Paint()
-      ..color = Colors.black.withValues(alpha: 0.6)
+      ..color = Colors.black.withValues(alpha: 0.7)
       ..style = PaintingStyle.fill;
 
     final maskPath = Path()
@@ -1120,136 +1250,169 @@ class HeadMaskPainter extends CustomPainter {
 
     canvas.drawPath(maskPath, maskPaint);
 
-    // Draw animated guide circle
+    Color guideColor;
+    double guideAlpha;
+
+    if (isLivenessVerified) {
+      guideColor = Colors.green;
+      guideAlpha = 0.8 + animationValue * 0.2;
+    } else if (isFaceQualityGood && faceBoundingBox != null) {
+      guideColor = Colors.blue;
+      guideAlpha = 0.6 + animationValue * 0.3;
+    } else if (isFaceDetected) {
+      guideColor = Colors.orange;
+      guideAlpha = 0.4 + animationValue * 0.2;
+    } else {
+      guideColor = Colors.grey;
+      guideAlpha = 0.3 + animationValue * 0.1;
+    }
+
     final guidePaint = Paint()
-      ..color = isFaceQualityGood
-          ? Colors.green.withValues(alpha: 0.3 + animationValue * 0.2)
-          : Colors.orange.withValues(alpha: 0.3 + animationValue * 0.2)
+      ..color = guideColor.withValues(alpha: guideAlpha)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 3.0;
+      ..strokeWidth = 4.0;
 
     canvas.drawCircle(center, animatedRadius, guidePaint);
 
-    // Draw positioning arrows if face is not centered
     if (faceBoundingBox != null) {
-      _drawPositioningArrows(canvas, size, center, animatedRadius);
+      _drawPositioningStatus(canvas, size, center, animatedRadius, guideColor);
     }
 
-    // Draw corner guides
-    _drawCornerGuides(canvas, center, animatedRadius);
+    if (faceBoundingBox != null) {
+      _drawFaceBoundingBox(canvas, guideColor);
+    }
+
+    _drawCornerGuides(canvas, center, animatedRadius, guideColor);
   }
 
-  void _drawPositioningArrows(
+  void _drawPositioningStatus(
     Canvas canvas,
     Size size,
     Offset center,
     double radius,
+    Color color,
   ) {
-    final arrowPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.7)
+    if (faceBoundingBox == null) return;
+
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: 'Face Detected ✓',
+        style: TextStyle(
+          color: color,
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    );
+
+    textPainter.layout();
+
+    final textPosition = Offset(
+      center.dx - textPainter.width / 2,
+      center.dy + radius + 20,
+    );
+
+    final backgroundRect = Rect.fromLTWH(
+      textPosition.dx - 10,
+      textPosition.dy - 5,
+      textPainter.width + 20,
+      textPainter.height + 10,
+    );
+
+    final backgroundPaint = Paint()
+      ..color = Colors.black.withValues(alpha: 0.7)
+      ..style = PaintingStyle.fill;
+
+    canvas.drawRect(backgroundRect, backgroundPaint);
+
+    textPainter.paint(canvas, textPosition);
+  }
+
+  void _drawFaceBoundingBox(Canvas canvas, Color color) {
+    if (faceBoundingBox == null) return;
+
+    final boxPaint = Paint()
+      ..color = color.withValues(alpha: 0.8)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0;
+      ..strokeWidth = 3.0;
 
-    final faceCenter = Offset(
-      faceBoundingBox!.left + faceBoundingBox!.width / 2,
-      faceBoundingBox!.top + faceBoundingBox!.height / 2,
-    );
+    canvas.drawRect(faceBoundingBox!, boxPaint);
 
-    // Horizontal positioning arrow
-    if ((faceCenter.dx - center.dx).abs() > 20) {
-      final arrowDirection = faceCenter.dx < center.dx ? 1.0 : -1.0;
-      final arrowStart = Offset(
-        center.dx + (radius * 0.8 * arrowDirection),
-        center.dy,
-      );
-      final arrowEnd = Offset(
-        center.dx + (radius * 1.2 * arrowDirection),
-        center.dy,
-      );
-
-      _drawArrow(canvas, arrowStart, arrowEnd, arrowPaint);
-    }
-
-    // Vertical positioning arrow
-    if ((faceCenter.dy - center.dy).abs() > 20) {
-      final arrowDirection = faceCenter.dy < center.dy ? 1.0 : -1.0;
-      final arrowStart = Offset(
-        center.dx,
-        center.dy + (radius * 0.8 * arrowDirection),
-      );
-      final arrowEnd = Offset(
-        center.dx,
-        center.dy + (radius * 1.2 * arrowDirection),
-      );
-
-      _drawArrow(canvas, arrowStart, arrowEnd, arrowPaint);
-    }
-  }
-
-  void _drawArrow(Canvas canvas, Offset start, Offset end, Paint paint) {
-    final path = Path()
-      ..moveTo(start.dx, start.dy)
-      ..lineTo(end.dx, end.dy);
-
-    canvas.drawPath(path, paint);
-
-    // Draw arrowhead
-    final arrowLength = 15.0;
-    final arrowAngle = 0.5;
-    final dx = end.dx - start.dx;
-    final dy = end.dy - start.dy;
-    final angle = atan2(dy, dx);
-
-    final arrowPoint1 = Offset(
-      end.dx - arrowLength * cos(angle - arrowAngle),
-      end.dy - arrowLength * sin(angle - arrowAngle),
-    );
-    final arrowPoint2 = Offset(
-      end.dx - arrowLength * cos(angle + arrowAngle),
-      end.dy - arrowLength * sin(angle + arrowAngle),
-    );
-
-    final arrowPath = Path()
-      ..moveTo(end.dx, end.dy)
-      ..lineTo(arrowPoint1.dx, arrowPoint1.dy)
-      ..lineTo(arrowPoint2.dx, arrowPoint2.dy)
-      ..close();
-
-    canvas.drawPath(arrowPath, paint..style = PaintingStyle.fill);
-  }
-
-  void _drawCornerGuides(Canvas canvas, Offset center, double radius) {
+    final cornerLength = 15.0;
     final cornerPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.4)
+      ..color = color.withValues(alpha: 1.0)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0;
+      ..strokeWidth = 4.0;
 
-    final cornerLength = 20.0;
     final corners = [
-      Offset(center.dx - radius, center.dy - radius), // Top-left
-      Offset(center.dx + radius, center.dy - radius), // Top-right
-      Offset(center.dx - radius, center.dy + radius), // Bottom-left
-      Offset(center.dx + radius, center.dy + radius), // Bottom-right
+      faceBoundingBox!.topLeft,
+      faceBoundingBox!.topRight,
+      faceBoundingBox!.bottomLeft,
+      faceBoundingBox!.bottomRight,
     ];
 
     for (final corner in corners) {
-      // Horizontal line
-      canvas.drawLine(
-        corner,
-        Offset(corner.dx + cornerLength, corner.dy),
-        cornerPaint,
-      );
-      // Vertical line
-      canvas.drawLine(
-        corner,
-        Offset(corner.dx, corner.dy + cornerLength),
-        cornerPaint,
-      );
+      final path = Path()
+        ..moveTo(corner.dx, corner.dy)
+        ..lineTo(
+          corner.dx +
+              cornerLength * (corner.dx < faceBoundingBox!.center.dx ? 1 : -1),
+          corner.dy,
+        )
+        ..moveTo(corner.dx, corner.dy)
+        ..lineTo(
+          corner.dx,
+          corner.dy +
+              cornerLength * (corner.dy < faceBoundingBox!.center.dy ? 1 : -1),
+        );
+
+      canvas.drawPath(path, cornerPaint);
+    }
+
+    final centerPaint = Paint()
+      ..color = color.withValues(alpha: 1.0)
+      ..style = PaintingStyle.fill;
+
+    canvas.drawCircle(faceBoundingBox!.center, 3.0, centerPaint);
+  }
+
+  void _drawCornerGuides(
+    Canvas canvas,
+    Offset center,
+    double radius,
+    Color color,
+  ) {
+    final cornerPaint = Paint()
+      ..color = color.withValues(alpha: 0.5)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0;
+
+    final cornerLength = 25.0;
+    final corners = [
+      Offset(center.dx - radius, center.dy - radius),
+      Offset(center.dx + radius, center.dy - radius),
+      Offset(center.dx - radius, center.dy + radius),
+      Offset(center.dx + radius, center.dy + radius),
+    ];
+
+    for (final corner in corners) {
+      final path = Path()
+        ..moveTo(corner.dx, corner.dy)
+        ..lineTo(
+          corner.dx + cornerLength * (corner.dx < center.dx ? 1 : -1),
+          corner.dy,
+        )
+        ..moveTo(corner.dx, corner.dy)
+        ..lineTo(
+          corner.dx,
+          corner.dy + cornerLength * (corner.dy < center.dy ? 1 : -1),
+        );
+
+      canvas.drawPath(path, cornerPaint);
     }
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) {
-    return true; // Always repaint for animations
-  }
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }

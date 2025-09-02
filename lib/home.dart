@@ -12,52 +12,29 @@ class HomeView extends StatelessWidget {
         backgroundColor: Colors.amberAccent,
         toolbarHeight: 70,
         centerTitle: true,
-        title: Text('Verify Your Identity'),
+                    title: const Text('Verify Your Identity'),
       ),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(
+            const Text(
               'Please click the button below to start verification',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 29),
             ),
-            SizedBox(height: 20),
+            const SizedBox(height: 20),
             ElevatedButton(
-              onPressed: () async {
-                final cameras = await availableCameras();
-                if (context.mounted) {
-                  if (cameras.isNotEmpty) {
-                    final result = await Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => FaceDetectionView(),
-                      ),
-                    );
-                    if (context.mounted) {
-                      if (result == true) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Verification successful')),
-                        );
-                      } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Camera not active!')),
-                        );
-                      }
-                    }
-                  }
-                }
-              },
+              onPressed: () => _startVerification(context),
               style: ElevatedButton.styleFrom(
-                padding: EdgeInsets.all(20),
+                padding: const EdgeInsets.all(20),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(15),
                 ),
                 foregroundColor: Colors.black,
                 backgroundColor: Colors.amberAccent,
               ),
-              child: Text(
+              child: const Text(
                 'Verify Now',
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
               ),
@@ -65,6 +42,25 @@ class HomeView extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  Future<void> _startVerification(BuildContext context) async {
+    final cameras = await availableCameras();
+    if (!context.mounted || cameras.isEmpty) return;
+
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const FaceDetectionView(),
+      ),
+    );
+
+    if (!context.mounted) return;
+
+    final message = result == true ? 'Verification successful' : 'Camera not active!';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
     );
   }
 }
