@@ -53,7 +53,7 @@ class LivenessOverlayPainter extends CustomPainter {
     final animatedRadius = radius + (animationValue * 10);
 
     final maskPaint = Paint()
-      ..color = config.theme.backgroundColor.withOpacity(0.7)
+      ..color = config.theme.backgroundColor.withValues(alpha:0.7)
       ..style = PaintingStyle.fill;
 
     final maskPath = Path()
@@ -74,7 +74,7 @@ class LivenessOverlayPainter extends CustomPainter {
     final guideAlpha = _getGuideCircleAlpha();
 
     final guidePaint = Paint()
-      ..color = guideColor.withOpacity(guideAlpha)
+      ..color = guideColor.withValues(alpha:guideAlpha)
       ..style = PaintingStyle.stroke
       ..strokeWidth = UIConstants.guideCircleStrokeWidth;
 
@@ -83,7 +83,7 @@ class LivenessOverlayPainter extends CustomPainter {
     // Draw inner pulse ring for better visibility
     if (isPositionedCorrectly) {
       final innerPaint = Paint()
-        ..color = guideColor.withOpacity(guideAlpha * 0.3)
+        ..color = guideColor.withValues(alpha:guideAlpha * 0.3)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2.0;
 
@@ -97,7 +97,7 @@ class LivenessOverlayPainter extends CustomPainter {
 
     final boxColor = _getFaceBoundingBoxColor();
     final boxPaint = Paint()
-      ..color = boxColor.withOpacity(0.8)
+      ..color = boxColor.withValues(alpha:0.8)
       ..style = PaintingStyle.stroke
       ..strokeWidth = UIConstants.faceBoundingBoxStrokeWidth;
 
@@ -182,7 +182,7 @@ class LivenessOverlayPainter extends CustomPainter {
     );
 
     final backgroundPaint = Paint()
-      ..color = config.theme.backgroundColor.withOpacity(0.8)
+      ..color = config.theme.backgroundColor.withValues(alpha:0.8)
       ..style = PaintingStyle.fill;
 
     canvas.drawRRect(
@@ -200,7 +200,7 @@ class LivenessOverlayPainter extends CustomPainter {
     final color = _getGuideCircleColor();
 
     final cornerPaint = Paint()
-      ..color = color.withOpacity(0.5)
+      ..color = color.withValues(alpha:0.5)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.0;
 
@@ -254,7 +254,7 @@ class LivenessOverlayPainter extends CustomPainter {
 
     // Draw background circle for emoji
     final emojiBackgroundPaint = Paint()
-      ..color = color.withOpacity(0.2)
+      ..color = color.withValues(alpha:0.2)
       ..style = PaintingStyle.fill;
 
     canvas.drawCircle(center, 30, emojiBackgroundPaint);
@@ -263,7 +263,7 @@ class LivenessOverlayPainter extends CustomPainter {
 
     // Draw animated ring for active challenge
     final ringPaint = Paint()
-      ..color = color.withOpacity(0.6 + animationValue * 0.4)
+      ..color = color.withValues(alpha:0.6 + animationValue * 0.4)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 3.0;
 
@@ -280,7 +280,7 @@ class LivenessOverlayPainter extends CustomPainter {
     // This would show progress based on challenge timing
     // For now, we'll show a simple pulsing ring
     final progressPaint = Paint()
-      ..color = color.withOpacity(0.3)
+      ..color = color.withValues(alpha:0.3)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 6.0
       ..strokeCap = StrokeCap.round;
@@ -375,7 +375,7 @@ class EnhancedHeadMaskPainter extends CustomPainter {
 
     // Background mask
     final maskPaint = Paint()
-      ..color = config.theme.backgroundColor.withOpacity(0.7)
+      ..color = config.theme.backgroundColor.withValues(alpha:0.7)
       ..style = PaintingStyle.fill;
 
     final maskPath = Path()
@@ -404,7 +404,7 @@ class EnhancedHeadMaskPainter extends CustomPainter {
     }
 
     final guidePaint = Paint()
-      ..color = guideColor.withOpacity(guideAlpha)
+      ..color = guideColor.withValues(alpha:guideAlpha)
       ..style = PaintingStyle.stroke
       ..strokeWidth = UIConstants.guideCircleStrokeWidth;
 
@@ -456,7 +456,7 @@ class EnhancedHeadMaskPainter extends CustomPainter {
     );
 
     final backgroundPaint = Paint()
-      ..color = config.theme.backgroundColor.withOpacity(0.8)
+      ..color = config.theme.backgroundColor.withValues(alpha:0.8)
       ..style = PaintingStyle.fill;
 
     canvas.drawRRect(
@@ -471,7 +471,7 @@ class EnhancedHeadMaskPainter extends CustomPainter {
     if (faceBoundingBox == null) return;
 
     final boxPaint = Paint()
-      ..color = color.withOpacity(0.8)
+      ..color = color.withValues(alpha:0.8)
       ..style = PaintingStyle.stroke
       ..strokeWidth = UIConstants.faceBoundingBoxStrokeWidth;
 
@@ -522,7 +522,7 @@ class EnhancedHeadMaskPainter extends CustomPainter {
     Color color,
   ) {
     final cornerPaint = Paint()
-      ..color = color.withOpacity(0.5)
+      ..color = color.withValues(alpha:0.5)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.0;
 

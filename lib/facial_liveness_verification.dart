@@ -3,7 +3,7 @@
 /// A comprehensive Flutter package for real-time facial liveness verification 
 /// using advanced anti-spoofing techniques, challenge-based verification,
 /// and customizable UI components.
-///
+library;
 /// ## Features
 /// 
 /// - **Real-time face detection** using Google ML Kit

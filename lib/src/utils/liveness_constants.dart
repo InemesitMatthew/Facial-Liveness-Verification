@@ -1,4 +1,5 @@
 /// Constants used throughout the liveness detection package.
+library;
 
 /// Default configuration values.
 class LivenessDefaults {

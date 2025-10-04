@@ -535,7 +535,7 @@ class _LivenessDetectionWidgetState extends State<LivenessDetectionWidget>
                           ? widget.config.theme.primaryColor
                           : Colors.grey.shade600,
                   border: Border.all(
-                    color: widget.config.theme.textColor.withOpacity(0.3),
+                    color: widget.config.theme.textColor.withValues(alpha:0.3),
                     width: 1,
                   ),
                 ),
@@ -596,7 +596,7 @@ class _LivenessDetectionWidgetState extends State<LivenessDetectionWidget>
       child: Container(
         padding: const EdgeInsets.all(UIConstants.smallSpacing),
         decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.7),
+          color: Colors.black.withValues(alpha:0.7),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Column(
