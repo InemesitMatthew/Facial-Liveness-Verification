@@ -4,7 +4,25 @@ import 'dart:math';
 import 'core.dart';
 
 class FaceDetectionView extends StatefulWidget {
-  const FaceDetectionView({super.key});
+  /// Optional callback when verification completes successfully
+  final Function(bool success)? onVerificationComplete;
+  
+  /// Optional callback for progress updates
+  final Function(String challenge, String status)? onProgress;
+  
+  /// Optional callback for errors
+  final Function(String error)? onError;
+  
+  /// Whether to show the custom overlay painter (default: true)
+  final bool showOverlay;
+  
+  const FaceDetectionView({
+    super.key,
+    this.onVerificationComplete,
+    this.onProgress,
+    this.onError,
+    this.showOverlay = true,
+  });
 
   @override
   State<FaceDetectionView> createState() => _FaceDetectionViewState();
@@ -469,6 +487,9 @@ class _FaceDetectionViewState extends State<FaceDetectionView>
       completedActions[action] = true;
       facePositionFeedback = 'Great job! Action completed successfully! 🎉';
     });
+    
+    // Notify progress
+    widget.onProgress?.call(action, 'completed');
 
     await Future.delayed(const Duration(milliseconds: 1000));
 
@@ -496,6 +517,9 @@ class _FaceDetectionViewState extends State<FaceDetectionView>
       challengeCompleted = true;
       livenessStatus = '🎉 Liveness verified successfully! 🎉';
     });
+    
+    // Notify completion
+    widget.onVerificationComplete?.call(true);
 
     Timer(const Duration(seconds: 2), () {
       if (mounted) {

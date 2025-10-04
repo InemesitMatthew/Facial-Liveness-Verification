@@ -1,0 +1,32 @@
+# Exclude unnecessary files from pub.dev publishing
+
+# Original implementation files (not part of package)
+lib/core.dart
+lib/face_detect.dart
+lib/home.dart
+lib/main.dart
+lib/perm_denied.dart
+lib/view.dart
+
+# Development files
+context.txt
+GUIDE.md
+doc/
+
+# Example app (separate from package)
+example_app/
+
+# Platform-specific generated files
+android/
+ios/
+linux/
+macos/
+windows/
+web/
+
+# Test files (not needed for package)
+test/
+
+# Git files
+.git/
+.gitignore

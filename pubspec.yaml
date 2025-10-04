@@ -1,23 +1,56 @@
-name: liveness_test
-description: "Production-ready liveness detection with comprehensive anti-spoofing"
-publish_to: 'none'
-version: 1.0.0+1
+name: facial_liveness_verification
+description: "Advanced facial liveness detection with anti-spoofing protection for Flutter apps. Includes enterprise-grade security features, customizable UI, and real-time challenge validation."
+version: 1.0.0
+homepage: https://github.com/InemesitMatthew/Facial-Liveness-Verification
+repository: https://github.com/InemesitMatthew/Facial-Liveness-Verification
+issue_tracker: https://github.com/InemesitMatthew/Facial-Liveness-Verification/issues
+documentation: https://github.com/InemesitMatthew/Facial-Liveness-Verification#readme
 
 environment:
-  sdk: ^3.9.0
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: '>=3.19.0'
 
 dependencies:
   flutter:
     sdk: flutter
-  cupertino_icons: ^1.0.8
-  google_mlkit_face_detection: ^0.13.1
-  permission_handler: ^12.0.1
+  
+  # Camera functionality
   camera: ^0.11.2
+  
+  # Face detection and ML Kit
+  google_mlkit_face_detection: ^0.13.1
+  
+  # Permissions handling
+  permission_handler: ^12.0.1
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
+  
+  # Additional dev dependencies for package development
+  mockito: ^5.4.4
+  build_runner: ^2.4.8
 
+# Package configuration
 flutter:
-  uses-material-design: true
+  # No assets needed for this package - everything is code-based
+
+# Platform support
+platforms:
+  android:
+  ios:
+  windows:
+  macos:
+  linux:
+
+# Topics for pub.dev discoverability
+topics:
+  - liveness-detection
+  - face-recognition
+  - anti-spoofing
+  - biometric
+  - security
+  - ml-kit
+  - camera
+  - verification
