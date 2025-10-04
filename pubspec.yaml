@@ -44,15 +44,12 @@ platforms:
   macos:
   linux:
 
-# Topics for pub.dev discoverability
+# Topics for pub.dev discoverability (max 5 allowed)
 topics:
   - liveness-detection
   - face-recognition
   - anti-spoofing
   - biometric
   - security
-  - ml-kit
-  - camera
-  - verification
 
 # publish_to: 'none' # Uncomment this line to prevent publishing to pub.dev
