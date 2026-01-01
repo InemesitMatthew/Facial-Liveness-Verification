@@ -2,6 +2,28 @@
 
 A simple, logic-focused Flutter package for real-time facial liveness verification. Developers handle UI - this package provides detection logic only.
 
+## What is Liveness Detection?
+
+Liveness detection verifies that a real person is in front of the camera, not a photo, video, or mask. This package uses:
+
+1. **Face Detection** - Detects faces using Google ML Kit
+2. **Anti-Spoofing** - Analyzes motion patterns to detect fake attempts
+3. **Interactive Challenges** - Asks users to perform actions (smile, blink, turn head) that prove they're alive
+
+## How It Works
+
+The package follows a simple flow:
+
+```
+1. Initialize → Camera and ML Kit setup
+2. Start Detection → Process camera frames
+3. Detect Face → Find and validate face position
+4. Run Challenges → User performs actions (smile, blink, etc.)
+5. Complete → Return verification result
+```
+
+All state changes are emitted via a stream, so you can build reactive UI that responds to detection events.
+
 ## Features
 
 - **Real-time face detection** using Google ML Kit
@@ -10,6 +32,7 @@ A simple, logic-focused Flutter package for real-time facial liveness verificati
 - **Stream-based state updates** for reactive UI
 - **Simple configuration** - no presets, just essential options
 - **Exposed camera controller** for custom UI integration
+- **Coordinate transformation utilities** for drawing face overlays
 
 ## Quick Start
 
@@ -61,6 +84,36 @@ await detector.stop();
 
 // Clean up resources
 await detector.dispose();
+```
+
+### Drawing Face Overlays
+
+If you want to draw overlays showing face position, use the coordinate utilities:
+
+```dart
+import 'package:facial_liveness_verification/facial_liveness_verification.dart';
+
+// Get face bounding box from detector
+final faceBox = detector.faceBoundingBox;
+if (faceBox != null) {
+  // Get camera preview size
+  final previewSize = detector.cameraController!.value.previewSize!;
+  final screenSize = MediaQuery.of(context).size;
+  
+  // Convert ML Kit coordinates to screen coordinates
+  final screenRect = CoordinateUtils.convertImageRectToScreenRect(
+    faceBox,
+    previewSize,
+    screenSize,
+  );
+  
+  // Now you can draw overlay at screenRect
+  // See example app for CustomPainter implementation
+}
+
+// Calculate target guide position
+final targetRect = CoordinateUtils.calculateTargetRect(screenSize);
+// Draw oval at targetRect to guide user positioning
 ```
 
 ### Custom UI Example
@@ -197,40 +250,73 @@ const customConfig = LivenessConfig(
 
 ### LivenessDetector Methods
 
-- `initialize()` - Initialize the detector and camera
-- `start()` - Start face detection and challenge processing
-- `stop()` - Stop detection (camera continues running)
-- `dispose()` - Clean up all resources
+- `initialize()` - Initialize the detector and camera. Must be called before `start()`.
+- `start()` - Start face detection and challenge processing. Begins processing camera frames.
+- `stop()` - Stop detection (camera continues running). Use this to pause without disposing.
+- `dispose()` - Clean up all resources. Always call this when done to free camera and ML Kit resources.
 
 ### LivenessDetector Properties
 
-- `stateStream` - Stream of `LivenessState` updates
-- `cameraController` - Exposed `CameraController` for UI preview
-- `faceBoundingBox` - Current face bounding box (`Rect?`)
+- `stateStream` - Stream of `LivenessState` updates. Listen to this for all state changes.
+- `cameraController` - Exposed `CameraController` for UI preview. Use with `CameraPreview` widget.
+- `faceBoundingBox` - Current face bounding box (`Rect?`). In ML Kit image coordinates - use `CoordinateUtils` to convert to screen coordinates.
+
+### CoordinateUtils (Optional Utility)
+
+Helper class for coordinate transformations when drawing UI overlays:
+
+- `convertImageRectToScreenRect()` - Converts ML Kit image coordinates to screen coordinates. Handles aspect ratio differences and rotation automatically.
+- `calculateTargetRect()` - Calculates a centered target rectangle for face positioning guidance. Useful for drawing oval guides.
 
 ## State Management
 
-The detector provides a stream of states:
+The detector provides a stream of states that you can listen to and update your UI accordingly:
 
-- `LivenessStateType.initialized` - Detector ready
-- `LivenessStateType.detecting` - Detection in progress
-- `LivenessStateType.noFace` - No face detected
-- `LivenessStateType.faceDetected` - Face detected
-- `LivenessStateType.positioning` - Face being positioned
-- `LivenessStateType.positioned` - Face positioned correctly
-- `LivenessStateType.challengeInProgress` - Challenge active
-- `LivenessStateType.challengeCompleted` - Challenge completed
-- `LivenessStateType.completed` - All challenges completed
-- `LivenessStateType.error` - Error occurred
+- `LivenessStateType.initialized` - Detector and camera are ready. Safe to show camera preview.
+- `LivenessStateType.detecting` - Detection in progress. Processing camera frames.
+- `LivenessStateType.noFace` - No face detected in current frame. Show "position face" message.
+- `LivenessStateType.faceDetected` - Face detected but may not be positioned correctly yet.
+- `LivenessStateType.positioning` - Face detected but not yet properly centered/sized. Show positioning guidance.
+- `LivenessStateType.positioned` - Face is properly positioned. Challenges can begin.
+- `LivenessStateType.challengeInProgress` - A challenge is currently active. Show challenge instruction.
+- `LivenessStateType.challengeCompleted` - Current challenge completed. Moving to next challenge.
+- `LivenessStateType.completed` - All challenges completed successfully! Check `state.result` for details.
+- `LivenessStateType.error` - An error occurred. Check `state.error` for details and recovery options.
+
+### Understanding the Flow
+
+```
+initialized → detecting → faceDetected → positioning → positioned 
+  → challengeInProgress → challengeCompleted → (repeat for each challenge) 
+  → completed
+```
+
+If face is lost at any point, state returns to `noFace` or `positioning`.
 
 ## Example App
 
-Run the example app to see custom UI integration:
+The example app demonstrates a complete implementation with:
+
+- Custom UI overlays showing face position and target guide
+- Challenge progress indicators
+- Dynamic instruction text based on state
+- Coordinate transformation for drawing overlays
+- Error handling and recovery
+
+Run the example app:
 
 ```bash
 cd example_app
 flutter run
 ```
+
+The example app code is heavily commented to help you understand how to integrate the package. Key concepts demonstrated:
+
+1. **State Stream Listening** - How to listen and react to state changes
+2. **Camera Preview Integration** - Using the exposed camera controller
+3. **Coordinate Transformation** - Converting ML Kit coordinates to screen coordinates
+4. **Custom Overlays** - Drawing face guides and progress indicators
+5. **Challenge Instructions** - Using challenge instructions from the package
 
 ## iOS Setup
 
