@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Better inline documentation throughout codebase
 - Enhanced README with "How It Works" section and better explanations
 
-## [2.0.0] - 2025-10-04
+## [2.0.0] - 2025-12-26
 
 ### Changed (Breaking)
 - **Complete refactor** - Package is now logic-focused, developers handle UI
