@@ -7,12 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-01-01
+
 ### Added
 - `CoordinateUtils` utility class for coordinate transformations
   - `convertImageRectToScreenRect()` - Converts ML Kit image coordinates to screen coordinates for UI overlays
   - `calculateTargetRect()` - Calculates target rectangle for face positioning guidance
 - Comprehensive documentation in example app showing how to use the package
 - Better inline documentation throughout codebase
+- Enhanced README with "How It Works" section and better explanations
 
 ## [2.0.0] - 2025-10-04
 

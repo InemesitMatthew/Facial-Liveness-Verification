@@ -1,6 +1,6 @@
 name: facial_liveness_verification
 description: "Advanced facial liveness detection with anti-spoofing protection for Flutter apps. Includes enterprise-grade security features, customizable UI, and real-time challenge validation."
-version: 1.0.0
+version: 2.1.0
 homepage: https://github.com/InemesitMatthew/Facial-Liveness-Verification
 repository: https://github.com/InemesitMatthew/Facial-Liveness-Verification
 issue_tracker: https://github.com/InemesitMatthew/Facial-Liveness-Verification/issues
