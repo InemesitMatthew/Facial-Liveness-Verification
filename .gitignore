@@ -42,7 +42,6 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 branch_structure.json
-.gitignore
 
 .vscode/
 public/fonts/
